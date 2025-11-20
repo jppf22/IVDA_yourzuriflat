@@ -1,0 +1,10 @@
+
+### Top-level ignores
+
+# IDE config files
+.vscode/
+.idea/
+.vs
+
+# Project files
+project_files/
