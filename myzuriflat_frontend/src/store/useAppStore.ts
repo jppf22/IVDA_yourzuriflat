@@ -4,6 +4,7 @@
  */
 
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import type { Apartment, ApartmentFilters } from '../api/types';
 
 export interface AppState {
@@ -54,6 +55,13 @@ export interface AppState {
   setCalibrationComplete: (complete: boolean) => void;
   ratingsCount: number;
   setRatingsCount: (count: number) => void;
+
+  // Star (radar) chart dynamic attributes
+  starAttributes: string[];
+  setStarAttributes: (attrs: string[]) => void;
+  toggleStarAttribute: (attr: string) => void;
+  resetStarAttributes: () => void;
+  starAttributesVersion: number; // for future migrations
 }
 
 const defaultFilters: ApartmentFilters = {
@@ -71,7 +79,9 @@ const generateSessionId = (): string => {
   return `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 };
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>()(
+  persist(
+    (set, get) => ({
   // Session management
   sessionId: generateSessionId(),
   setSessionId: (id) => set({ sessionId: id }),
@@ -136,6 +146,49 @@ export const useAppStore = create<AppState>((set) => ({
   setCalibrationComplete: (complete) => set({ calibrationComplete: complete }),
   ratingsCount: 0,
   setRatingsCount: (count) => set({ ratingsCount: count }),
-}));
+
+  // Star chart attributes (persisted)
+  starAttributesVersion: 1,
+  starAttributes: [
+    'minimum_nights',
+    'accommodates',
+    'price',
+    'distance_from_city_center',
+  ],
+  setStarAttributes: (attrs) =>
+    set({ starAttributes: attrs.slice(0, 7) }),
+  toggleStarAttribute: (attr) => {
+    const current = get().starAttributes;
+    if (current.includes(attr)) {
+      set({ starAttributes: current.filter((a) => a !== attr) });
+    } else if (current.length < 7) {
+      set({ starAttributes: [...current, attr] });
+    }
+  },
+  resetStarAttributes: () =>
+    set({
+      starAttributes: [
+        'minimum_nights',
+        'accommodates',
+        'price',
+        'distance_from_city_center',
+      ],
+    }),
+    }),
+    {
+      name: 'starChartPrefs',
+      version: 1,
+      partialize: (state) => ({
+        starAttributes: state.starAttributes,
+        starAttributesVersion: state.starAttributesVersion,
+      }),
+      onRehydrateStorage: () => (state) => {
+        if (state && state.starAttributesVersion !== 1) {
+          // future migration logic placeholder
+        }
+      },
+    }
+  )
+);
 
 export default useAppStore;
