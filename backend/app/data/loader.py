@@ -11,14 +11,40 @@ class DataStore:
         base = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
         if path is None:
             path = os.path.join(base, "data", "listings_clean.json")
+        self.base_dir = base
         self.raw = pd.read_json(path, lines=True)
         self._preprocess()
 
     def _preprocess(self):
         df = self.raw.copy()
 
+        # Attach high resolution image URLs from the original export when missing in the cleaned file.
+        if "picture_url" not in df.columns:
+            picture_path = os.path.join(self.base_dir, "data", "listings.csv")
+            if os.path.exists(picture_path):
+                try:
+                    pictures = pd.read_csv(picture_path, usecols=["id", "picture_url"])
+                    pictures["id"] = pictures["id"].astype(str)
+                    df["id"] = df["id"].astype(str)
+                    df = df.merge(pictures, on="id", how="left")
+                except Exception:
+                    df["picture_url"] = np.nan
+            else:
+                df["picture_url"] = np.nan
+
         if "id" in df.columns:
             df["id"] = df["id"].astype(str)
+
+        # Provide alias columns expected by frontend/UI specification
+        # Map cleaned neighbourhood/group values to *_cleansed naming for clarity
+        if "neighbourhood" in df.columns and "neighbourhood_cleansed" not in df.columns:
+            df["neighbourhood_cleansed"] = df["neighbourhood"]
+        if "neighbourhood_group" in df.columns and "neighbourhood_group_cleansed" not in df.columns:
+            df["neighbourhood_group_cleansed"] = df["neighbourhood_group"]
+
+        # Ensure amenities stays a raw string for parsing client-side if it's not already list
+        if "amenities" in df.columns:
+            df["amenities"] = df["amenities"].astype(str)
 
         # select feature columns for ML
         drop_cols = ['id', 'name', 'host_id', 'host_name']
@@ -42,6 +68,9 @@ class DataStore:
             feature_names = []
         else:
             X = preprocess.fit_transform(df_model)
+            # Densify if sparse to simplify downstream math (cosine similarity & contributions)
+            if hasattr(X, 'toarray'):
+                X = X.toarray()
             # get feature names for explainability
             try:
                 feature_names = preprocess.get_feature_names_out().tolist()

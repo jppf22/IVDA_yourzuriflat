@@ -48,7 +48,7 @@ class ApartmentsResponse(BaseModel):
 
 class RatingRequest(BaseModel):
     session_id: str
-    apartment_id: int
+    apartment_id: str  # accept string ids from frontend
     rating: float
 
 
@@ -96,10 +96,31 @@ def get_recommendations(session_id: str = Query(...), limit: int = 50):
     scores = SESSION_MODEL.predict_scores(session_id)
     df = DATASTORE.df
     if scores is None:
-        # fallback: rank by review_scores_rating then price
-        df_sorted = df.sort_values(by=["review_scores_rating", "price"], ascending=[False, True])
+        # Defensive fallback: attempt to sort by available quality/review signals then price.
+        df_sorted = df.copy()
+        sort_cols = []
+        if "review_scores_rating" in df_sorted.columns:
+            sort_cols.append("review_scores_rating")
+        elif "number_of_reviews" in df_sorted.columns:
+            sort_cols.append("number_of_reviews")
+        # Always include price if present (ascending for cheaper first)
+        if "price" in df_sorted.columns:
+            sort_cols.append("price")
+        if sort_cols:
+            ascending_map = {
+                "review_scores_rating": False,
+                "number_of_reviews": False,
+                "price": True,
+            }
+            ascending = [ascending_map[c] for c in sort_cols]
+            try:
+                df_sorted = df_sorted.sort_values(by=sort_cols, ascending=ascending)
+            except Exception:
+                pass  # keep original order if sorting fails
         items = df_sorted.head(limit).to_dict(orient="records")
-        payload = {"recommendations": [{"apartment": it, "predicted_score": it.get("review_scores_rating", 0)} for it in items], "session_id": session_id, "model_trained": False}
+        def _fallback_score(row: dict):
+            return row.get("review_scores_rating") or row.get("number_of_reviews") or 0
+        payload = {"recommendations": [{"apartment": it, "predicted_score": _fallback_score(it)} for it in items], "session_id": session_id, "model_trained": False}
         encoded = jsonable_encoder(payload)
         return JSONResponse(content=_sanitize_for_json(encoded))
     idx = np.argsort(-scores)[:limit]

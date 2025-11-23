@@ -30,7 +30,7 @@ When in doubt, align your work with the IVDA tasks (T1–T6) and the human-in-th
 **Users:** Non-expert short-term renters who want to find a place matching their preferences.
 
 **Dataset:**
-- **Source:** `zurich apartment renting.csv` (tabular).
+- **Source:** `data/listings.csv` (tabular).
 - **Size:** Initially 2246 rows, each representing one listing.
 - **Attributes:** 18 attributes (after preprocessing) including:
   - **Location:** latitude, longitude, neighbourhood, etc.
@@ -147,7 +147,7 @@ Use or adapt to an existing structure. If none exists, prefer something like:
         __init__.py
         loader.py
         preprocessing.py
-        zurich_apartments.csv
+        data/listings.csv
       schemas/
         __init__.py
         apartments.py
@@ -316,7 +316,7 @@ The backend should:
 
 #### **Load & serve the dataset**
 
-- At startup, load `zurich_apartments.csv` (or equivalent).
+- At startup, load `data/listings.csv` (or equivalent).
 - Apply preprocessing:
   - Fill missing review fields with 0.
   - Drop license column.
@@ -522,10 +522,11 @@ npm test
 
 From `/backend`:
 
-**Create and activate a virtual environment** (if not already done).
+**Activate the Conda environment `IVDA_GROUP`** (used by the project notebooks and kernels).
 
 **Install dependencies:**
 ```bash
+conda activate IVDA_GROUP
 pip install -r requirements.txt
 ```
 

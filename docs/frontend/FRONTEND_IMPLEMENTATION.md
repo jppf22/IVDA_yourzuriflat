@@ -222,7 +222,7 @@ npm run preview
 
 ### Required for Full Functionality
 1. **Backend Implementation** - The frontend is ready but needs the backend API
-2. **Dataset Integration** - Backend must load `zurich_apartments.csv`
+2. **Dataset Integration** - Backend must load `data/listings.csv`
 3. **Model Training** - Implement Ridge regression in backend
 4. **Initial Sampling** - Implement farthest-first sampling
 

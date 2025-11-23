@@ -69,3 +69,32 @@ export const formatScore = (score: number, maxScore: number = 10): string => {
 export const formatNeighbourhood = (neighbourhood: string): string => {
   return neighbourhood || 'Unknown';
 };
+
+// Parse amenities field which may arrive as a JSON-like string list
+export const parseAmenities = (amenities: string | string[] | undefined): string[] => {
+  if (!amenities) return [];
+  if (Array.isArray(amenities)) return amenities;
+  const trimmed = amenities.trim();
+  // Attempt JSON parse; fall back to naive split
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) return parsed.map(String);
+    } catch {
+      // ignore and fall through
+    }
+  }
+  // Split on comma, strip quotes
+  return trimmed
+    .replace(/^\[|\]$/g, '')
+    .split(',')
+    .map((s) => s.replace(/^[\s\"']+|[\s\"']+$/g, ''))
+    .filter((s) => s.length > 0);
+};
+
+// Format amenities nicely (limit list length with optional cap)
+export const formatAmenities = (amenities: string[] , cap: number = 12): string => {
+  if (amenities.length === 0) return 'None';
+  const shown = amenities.slice(0, cap).join(', ');
+  return amenities.length > cap ? `${shown}, …` : shown;
+};

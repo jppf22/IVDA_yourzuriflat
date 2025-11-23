@@ -4,6 +4,8 @@
  * Supports T4 (calibration) and detail-on-demand interaction
  */
 
+import { useEffect, useState } from 'react';
+import type { MouseEvent } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { useApartmentDetail } from '../api/hooks';
 import { RatingControl } from './RatingControl';
@@ -15,6 +17,9 @@ import {
   formatDate,
   formatRoomType,
   formatNumber,
+  parseAmenities,
+  formatAmenities,
+  formatNeighbourhood,
 } from '../utils/formatting';
 import './ApartmentDetailDrawer.css';
 
@@ -28,6 +33,7 @@ export const ApartmentDetailDrawer = ({
   currentRatings,
 }: ApartmentDetailDrawerProps) => {
   const { detailDrawerOpen, detailApartmentId, closeDetailDrawer } = useAppStore();
+  const [imageError, setImageError] = useState(false);
 
   const {
     data: apartment,
@@ -35,6 +41,10 @@ export const ApartmentDetailDrawer = ({
     isError,
     refetch,
   } = useApartmentDetail(detailApartmentId || '');
+
+  useEffect(() => {
+    setImageError(false);
+  }, [detailApartmentId]);
 
   if (!detailDrawerOpen || !detailApartmentId) {
     return null;
@@ -44,7 +54,7 @@ export const ApartmentDetailDrawer = ({
     closeDetailDrawer();
   };
 
-  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleBackdropClick = (e: MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) {
       handleClose();
     }
@@ -73,11 +83,22 @@ export const ApartmentDetailDrawer = ({
 
           {apartment && (
             <>
-              {/* Image Placeholder */}
-              <div className="apartment-image-placeholder">
-                <span>📷</span>
-                <p>Image not available</p>
-              </div>
+              {/* Listing hero image (falls back to placeholder if unavailable) */}
+              {apartment.picture_url && !imageError ? (
+                <div className="apartment-image-wrapper">
+                  <img
+                    src={apartment.picture_url}
+                    alt={apartment.name || 'Apartment photo'}
+                    loading="lazy"
+                    onError={() => setImageError(true)}
+                  />
+                </div>
+              ) : (
+                <div className="apartment-image-placeholder">
+                  <span>📷</span>
+                  <p>Image not available</p>
+                </div>
+              )}
 
               {/* Title and Basic Info */}
               <div className="apartment-header">
@@ -89,9 +110,9 @@ export const ApartmentDetailDrawer = ({
               <div className="rating-section">
                 <h4>Your Rating</h4>
                 <RatingControl
-                  apartmentId={apartment.id}
-                  currentRating={currentRatings[apartment.id]}
-                  onRate={(rating) => onRate(apartment.id, rating)}
+                  apartmentId={String(apartment.id)}
+                  currentRating={currentRatings[String(apartment.id)]}
+                  onRate={(rating) => onRate(String(apartment.id), rating)}
                   size="large"
                 />
               </div>
@@ -99,71 +120,92 @@ export const ApartmentDetailDrawer = ({
               {/* Details Grid */}
               <div className="details-grid">
                 <div className="detail-item">
+                  <span className="detail-label">Property Type</span>
+                  <span className="detail-value">{apartment.property_type}</span>
+                </div>
+                <div className="detail-item">
                   <span className="detail-label">Room Type</span>
                   <span className="detail-value">{formatRoomType(apartment.room_type)}</span>
                 </div>
-
+                <div className="detail-item">
+                  <span className="detail-label">Neighbourhood Group</span>
+                  <span className="detail-value">{formatNeighbourhood(apartment.neighbourhood_group_cleansed || apartment.neighbourhood_group || '')}</span>
+                </div>
                 <div className="detail-item">
                   <span className="detail-label">Neighbourhood</span>
-                  <span className="detail-value">{apartment.neighbourhood}</span>
+                  <span className="detail-value">{formatNeighbourhood(apartment.neighbourhood_cleansed || apartment.neighbourhood || '')}</span>
                 </div>
-
                 <div className="detail-item">
                   <span className="detail-label">Distance from Center</span>
                   <span className="detail-value">
-                    {formatDistance(apartment.distance_from_center)}
+                    {formatDistance((apartment.distance_from_city_center || apartment.distance_from_center || 0))}
                   </span>
                 </div>
-
                 <div className="detail-item">
-                  <span className="detail-label">Minimum Nights</span>
+                  <span className="detail-label">Accommodates</span>
+                  <span className="detail-value">{apartment.accommodates}</span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Bathrooms</span>
+                  <span className="detail-value">{apartment.bathrooms}</span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Bedrooms</span>
+                  <span className="detail-value">{apartment.bedrooms}</span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Beds</span>
+                  <span className="detail-value">{apartment.beds}</span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Min Nights</span>
                   <span className="detail-value">{apartment.minimum_nights}</span>
                 </div>
-
                 <div className="detail-item">
-                  <span className="detail-label">Availability</span>
-                  <span className="detail-value">{apartment.availability_365} days/year</span>
+                  <span className="detail-label">Max Nights</span>
+                  <span className="detail-value">{apartment.maximum_nights}</span>
                 </div>
-
-                <div className="detail-item">
-                  <span className="detail-label">Number of Reviews</span>
-                  <span className="detail-value">{formatNumber(apartment.number_of_reviews)}</span>
-                </div>
-
+                {apartment.number_of_reviews !== undefined && (
+                  <div className="detail-item">
+                    <span className="detail-label"># Reviews</span>
+                    <span className="detail-value">{formatNumber(apartment.number_of_reviews)}</span>
+                  </div>
+                )}
                 {apartment.reviews_per_month && apartment.reviews_per_month > 0 && (
                   <div className="detail-item">
-                    <span className="detail-label">Reviews per Month</span>
+                    <span className="detail-label">Reviews / Month</span>
                     <span className="detail-value">{apartment.reviews_per_month.toFixed(2)}</span>
                   </div>
                 )}
-
                 {apartment.last_review && (
                   <div className="detail-item">
                     <span className="detail-label">Last Review</span>
                     <span className="detail-value">{formatDate(apartment.last_review)}</span>
                   </div>
                 )}
-
                 <div className="detail-item">
-                  <span className="detail-label">Host Name</span>
-                  <span className="detail-value">{apartment.host_name}</span>
+                  <span className="detail-label">Host</span>
+                  <span className="detail-value">{apartment.host_name || 'Unknown'} (ID: {apartment.host_id})</span>
                 </div>
-
-                <div className="detail-item">
-                  <span className="detail-label">Host Listings</span>
-                  <span className="detail-value">
-                    {apartment.calculated_host_listings_count}
-                  </span>
-                </div>
-
+                {apartment.calculated_host_listings_count !== undefined && (
+                  <div className="detail-item">
+                    <span className="detail-label">Host Listings</span>
+                    <span className="detail-value">{apartment.calculated_host_listings_count}</span>
+                  </div>
+                )}
                 <div className="detail-item">
                   <span className="detail-label">Latitude</span>
                   <span className="detail-value">{apartment.latitude.toFixed(6)}</span>
                 </div>
-
                 <div className="detail-item">
                   <span className="detail-label">Longitude</span>
                   <span className="detail-value">{apartment.longitude.toFixed(6)}</span>
+                </div>
+                <div className="detail-item amenities-span" style={{ gridColumn: 'span 2' }}>
+                  <span className="detail-label">Amenities</span>
+                  <span className="detail-value">
+                    {formatAmenities(parseAmenities(apartment.amenities))}
+                  </span>
                 </div>
               </div>
             </>

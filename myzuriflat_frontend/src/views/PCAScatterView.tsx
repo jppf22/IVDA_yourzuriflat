@@ -105,7 +105,10 @@ export const PCAScatterView = () => {
         return OPACITY.dimmed;
       }),
     },
-    text: points.map((p) => p.apartment.name),
+    text: points.map((p) => {
+      const a = p.apartment;
+      return `<b>${a.name}</b><br>${a.property_type}<br>${a.room_type}<br>CHF ${a.price}/night<br>Accom: ${a.accommodates}`;
+    }),
     hoverinfo: 'text',
     customdata: points.map((p) => p.apartment_id),
   };

@@ -3,9 +3,13 @@
  * Bar chart showing feature contributions to predicted ratings
  */
 
+import React from 'react';
 import Plot from 'react-plotly.js';
+import type { AxiosError } from 'axios';
+import type { Apartment } from '../api/types';
 import { useAppStore } from '../store/useAppStore';
 import { useExplainability } from '../api/hooks';
+import apiClient from '../api/client';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorMessage } from '../components/ErrorMessage';
 import { CONTRIBUTION_COLORS } from '../utils/colors';
@@ -16,22 +20,71 @@ export const ExplainabilityView = () => {
   const { sessionId, selectedApartmentIds, topRecommendations } = useAppStore();
 
   // Use selected apartments or top 3 recommendations
-  const apartmentIds =
+  const apartmentIds:
+    | string[]
+    | undefined =
     selectedApartmentIds.length > 0
       ? selectedApartmentIds.slice(0, 3)
-      : topRecommendations.slice(0, 3).map((apt) => apt.id);
+      : topRecommendations.slice(0, 3).map((apt) => String(apt.id));
 
-  const {
-    data: explainabilityData,
-    isLoading,
-    isError,
-    refetch,
-  } = useExplainability(sessionId, apartmentIds);
+  const { data: explainabilityData, isLoading, isError, error, refetch } = useExplainability(
+    sessionId,
+    apartmentIds
+  );
+
+  const modelNotTrained = Boolean(
+    (error as AxiosError<{ detail?: string }> | undefined)?.response?.status === 400
+  );
+
+  const [apartmentMap, setApartmentMap] = React.useState<Record<number, Apartment | null>>({});
+
+  // fetch apartment metadata for labels (name) for each apartment id returned
+  React.useEffect(() => {
+    let mounted = true;
+    const fetchApts = async () => {
+      if (!explainabilityData || !explainabilityData.contributions) return;
+      const ids = explainabilityData.contributions.map((c) => c.apartment_id);
+      try {
+        const pairs = await Promise.all(
+          ids.map(async (id) => {
+            try {
+              const apt = await apiClient.get<Apartment>(`/apartments/${id}`);
+              return [id, apt] as const;
+            } catch {
+              return [id, null] as const;
+            }
+          })
+        );
+        if (!mounted) return;
+        const map: Record<number, Apartment | null> = {};
+        for (const [id, apt] of pairs) {
+          map[id as number] = apt;
+        }
+        setApartmentMap(map);
+      } catch {
+        // ignore
+      }
+    };
+    fetchApts();
+    return () => {
+      mounted = false;
+    };
+  }, [explainabilityData]);
 
   if (isLoading) {
     return (
       <div className="explainability-view">
         <LoadingSpinner message="Computing feature contributions..." />
+      </div>
+    );
+  }
+
+  if (modelNotTrained) {
+    return (
+      <div className="explainability-view">
+        <div className="empty-state">
+          <p>Model not trained yet. Rate more apartments to unlock explanations.</p>
+        </div>
       </div>
     );
   }
@@ -44,7 +97,7 @@ export const ExplainabilityView = () => {
     );
   }
 
-  if (!explainabilityData || explainabilityData.explanations.length === 0) {
+  if (!explainabilityData || !explainabilityData.contributions || explainabilityData.contributions.length === 0) {
     return (
       <div className="explainability-view">
         <div className="empty-state">
@@ -54,14 +107,18 @@ export const ExplainabilityView = () => {
     );
   }
 
-  // Prepare bar chart data
-  const traces: Data[] = explainabilityData.explanations.flatMap((explanation) => {
-    const positive = explanation.contributions.filter((c) => c.contribution > 0);
-    const negative = explanation.contributions.filter((c) => c.contribution < 0);
+  // Prepare bar chart data from numeric contributions and feature names
+  const featureNames = explainabilityData.coefficients.feature_names;
+  const traces: Data[] = explainabilityData.contributions.flatMap((entry) => {
+    const apt = apartmentMap[entry.apartment_id];
+    const aptLabel = apt && apt.name ? `${apt.name.substring(0, 25)}` : `id:${entry.apartment_id}`;
+    const pairs = featureNames.map((fname, idx) => ({ feature_name: fname, contribution: entry.contributions[idx] || 0 }));
+    const positive = pairs.filter((c) => c.contribution > 0);
+    const negative = pairs.filter((c) => c.contribution < 0);
 
     const positiveTrace: Data = {
       type: 'bar',
-      name: `${explanation.apartment.name.substring(0, 25)} (+)`,
+      name: `${aptLabel} (+)`,
       x: positive.map((c) => c.contribution),
       y: positive.map((c) => c.feature_name),
       orientation: 'h',
@@ -72,7 +129,7 @@ export const ExplainabilityView = () => {
 
     const negativeTrace: Data = {
       type: 'bar',
-      name: `${explanation.apartment.name.substring(0, 25)} (-)`,
+      name: `${aptLabel} (-)`,
       x: negative.map((c) => c.contribution),
       y: negative.map((c) => c.feature_name),
       orientation: 'h',
@@ -98,7 +155,7 @@ export const ExplainabilityView = () => {
       <div className="explainability-header">
         <h3>Model Explanation</h3>
         <p className="explainability-subtitle">
-          Feature contributions for {explainabilityData.explanations.length} apartment(s)
+          Feature contributions for {explainabilityData.contributions.length} apartment(s)
         </p>
       </div>
       <Plot

@@ -72,7 +72,8 @@ export const usePCA = (
         mode,
         filter_outliers: outliers,
       }),
-    enabled: attributes !== undefined && attributes.length > 0,
+    // The backend will compute PCA on available features if no attributes are passed.
+    enabled: true,
     staleTime: 5 * 60 * 1000,
   });
 };
@@ -116,10 +117,20 @@ export const useRateMutation = () => {
   return useMutation<RatingResponse, Error, RatingRequest>({
     mutationFn: (ratingData: RatingRequest) =>
       apiClient.post<RatingResponse>('/ratings', ratingData),
-    onSuccess: (_data, variables) => {
-      // Invalidate and refetch recommendations after rating
-      queryClient.invalidateQueries({ queryKey: ['recommendations', variables.session_id] });
-      queryClient.invalidateQueries({ queryKey: ['explainability', variables.session_id] });
+    onSuccess: async (_data, variables) => {
+      const isRecommendationsQuery = (queryKey: unknown): boolean =>
+        Array.isArray(queryKey) && queryKey[0] === 'recommendations' && queryKey[1] === variables.session_id;
+
+      const isExplainabilityQuery = (queryKey: unknown): boolean =>
+        Array.isArray(queryKey) && queryKey[0] === 'explainability' && queryKey[1] === variables.session_id;
+
+      // Force a fresh recommendation pull so list + color encodings stay in sync after every rating.
+      await queryClient.invalidateQueries({ predicate: (q) => isRecommendationsQuery(q.queryKey) });
+      await queryClient.refetchQueries({ predicate: (q) => isRecommendationsQuery(q.queryKey), type: 'active' });
+
+      // Refresh explainability panels for the same session (covers selected + top-N ids).
+      await queryClient.invalidateQueries({ predicate: (q) => isExplainabilityQuery(q.queryKey) });
+      await queryClient.refetchQueries({ predicate: (q) => isExplainabilityQuery(q.queryKey), type: 'active' });
     },
     onError: (error) => {
       console.error('Rating submission failed:', error);

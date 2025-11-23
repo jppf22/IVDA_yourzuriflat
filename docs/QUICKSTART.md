@@ -141,11 +141,11 @@ Follow AGENT.md guidelines to implement the complete backend:
 
 1. **Setup**
    - Create `backend/` directory
-   - Setup Python virtual environment
-   - Install FastAPI, uvicorn, pandas, scikit-learn, etc.
+   - Activate Conda environment `IVDA_GROUP` (used by project Jupyter kernels)
+   - Install Python dependencies: `pip install -r backend/requirements.txt`
 
 2. **Data Loading**
-   - Load `zurich_apartments.csv`
+   - Load `data/listings.csv`
    - Preprocess (fill NAs, drop outliers, compute distance_from_center)
    - Normalize features
 

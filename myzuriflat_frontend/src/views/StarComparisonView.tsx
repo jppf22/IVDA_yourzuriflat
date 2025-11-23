@@ -45,12 +45,22 @@ export const StarComparisonView = () => {
     const color = getColorForApartment(apt.id, topRecommendationIds);
 
     // Normalize values (simplified - should use actual min/max from dataset)
+    const price = typeof apt.price === 'number' ? apt.price : 0;
+    const distance = typeof apt.distance_from_city_center === 'number'
+      ? apt.distance_from_city_center
+      : typeof apt.distance_from_center === 'number'
+        ? apt.distance_from_center
+        : 0;
+    const reviews = typeof apt.number_of_reviews === 'number' ? apt.number_of_reviews : 0;
+    const availability = typeof apt.availability_365 === 'number' ? apt.availability_365 : 0;
+    const minimumNights = typeof apt.minimum_nights === 'number' ? apt.minimum_nights : 0;
+
     const values = [
-      1 - Math.min(apt.price / 1000, 1), // Inverse price (lower is better)
-      1 - Math.min(apt.distance_from_center / 10, 1), // Inverse distance
-      Math.min(apt.number_of_reviews / 100, 1),
-      Math.min(apt.availability_365 / 365, 1),
-      1 - Math.min(apt.minimum_nights / 30, 1), // Inverse min nights
+      1 - Math.min(price / 1000, 1),
+      1 - Math.min(distance / 10, 1),
+      Math.min(reviews / 100, 1),
+      Math.min(availability / 365, 1),
+      1 - Math.min(minimumNights / 30, 1),
     ];
 
     return {

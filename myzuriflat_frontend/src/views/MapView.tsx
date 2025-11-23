@@ -29,7 +29,7 @@ export const MapView = () => {
 
   const [zoomLevel, setZoomLevel] = useState(11);
 
-  const topRecommendationIds = topRecommendations.map((apt) => apt.id);
+  const topRecommendationIds = topRecommendations.map((apt) => String(apt.id));
 
   if (apartmentsLoading || clustersLoading) {
     return (
@@ -88,14 +88,16 @@ export const MapView = () => {
       marker: {
         size: 10,
         color: apartments.map((apt) => {
-          if (selectedApartmentIds.includes(apt.id)) return '#f39c12';
-          if (brushedApartmentIds.includes(apt.id)) return '#3498db';
-          return getColorForApartment(apt.id, topRecommendationIds);
+          const idStr = String(apt.id);
+          if (selectedApartmentIds.includes(idStr)) return '#f39c12';
+          if (brushedApartmentIds.includes(idStr)) return '#3498db';
+          return getColorForApartment(idStr, topRecommendationIds);
         }),
         opacity: apartments.map((apt) => {
-          if (selectedApartmentIds.includes(apt.id)) return OPACITY.selected;
-          if (brushedApartmentIds.includes(apt.id)) return OPACITY.brushed;
-          if (topRecommendationIds.includes(apt.id)) return OPACITY.normal;
+          const idStr = String(apt.id);
+          if (selectedApartmentIds.includes(idStr)) return OPACITY.selected;
+          if (brushedApartmentIds.includes(idStr)) return OPACITY.brushed;
+          if (topRecommendationIds.includes(idStr)) return OPACITY.normal;
           return OPACITY.dimmed;
         }),
       },
@@ -103,12 +105,13 @@ export const MapView = () => {
         (apt) =>
           `<b>${apt.name}</b><br>` +
           `${formatPrice(apt.price)}/night<br>` +
+          `${apt.property_type}<br>` +
           `${formatRoomType(apt.room_type)}<br>` +
-          `${formatDistance(apt.distance_from_center)} from center<br>` +
-          `Reviews: ${apt.number_of_reviews}`
+          `Accommodates: ${apt.accommodates}<br>` +
+          `${formatDistance((apt.distance_from_city_center || apt.distance_from_center || 0))} from center`
       ),
       hoverinfo: 'text',
-      customdata: apartments.map((apt) => apt.id),
+      customdata: apartments.map((apt) => String(apt.id)),
       name: 'Apartments',
     };
     traces.push(apartmentTrace);

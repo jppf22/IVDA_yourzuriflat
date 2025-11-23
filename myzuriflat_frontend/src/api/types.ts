@@ -5,23 +5,43 @@
 
 // Apartment data structure
 export interface Apartment {
-  id: string;
+  // Core identification
+  id: string; // always coerced to string to avoid precision loss
   name: string;
-  host_id: string;
-  host_name: string;
-  neighbourhood: string;
+  // Host details
+  host_id: number | string;
+  host_name: string | null;
+  picture_url?: string | null;
+  // Location (cleaned naming plus legacy access)
+  neighbourhood_group?: string; // original column
+  neighbourhood?: string; // original column
+  neighbourhood_group_cleansed?: string; // alias provided by backend
+  neighbourhood_cleansed?: string; // alias provided by backend
   latitude: number;
   longitude: number;
+  // Property characteristics
+  property_type: string;
   room_type: string;
+  accommodates: number;
+  bathrooms: number;
+  bedrooms: number;
+  beds: number;
+  // Raw amenities string parsed client-side into array
+  amenities: string | string[];
+  // Pricing & stay constraints
   price: number;
   minimum_nights: number;
-  number_of_reviews: number;
+  maximum_nights: number;
+  // Existing legacy / additional metrics (may not be present in cleaned JSON)
+  number_of_reviews?: number;
   last_review?: string;
   reviews_per_month?: number;
-  calculated_host_listings_count: number;
-  availability_365: number;
-  distance_from_center: number;
-  // Additional preprocessed attributes may be included
+  calculated_host_listings_count?: number;
+  availability_365?: number;
+  distance_from_center?: number; // old naming retained if present
+  distance_from_city_center?: number; // new naming from cleaned dataset
+  // Any additional engineered features will be allowed
+  [key: string]: unknown;
 }
 
 // Rating request/response
@@ -72,24 +92,22 @@ export interface PCAResponse {
 }
 
 // Explainability
-export interface FeatureContribution {
-  feature_name: string;
-  contribution: number;
-  coefficient: number;
-  normalized_value: number;
+// Explainability (backend provides coefficients + per-apartment numeric contributions)
+export interface ExplainabilityCoefficients {
+  coef: number[];
+  intercept: number;
+  feature_names: string[];
 }
 
-export interface ApartmentExplanation {
-  apartment_id: string;
-  apartment: Apartment;
+export interface ApartmentContributions {
+  apartment_id: number;
   predicted_score: number;
-  intercept: number;
-  contributions: FeatureContribution[];
+  contributions: number[]; // numeric array aligned with feature_names
 }
 
 export interface ExplainabilityResponse {
-  explanations: ApartmentExplanation[];
-  session_id: string;
+  coefficients: ExplainabilityCoefficients;
+  contributions: ApartmentContributions[];
 }
 
 // Clustering

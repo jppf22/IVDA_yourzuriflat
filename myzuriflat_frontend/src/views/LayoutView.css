@@ -61,6 +61,7 @@
 .section-recommended {
   height: 400px;
   overflow: hidden;
+  flex: 0 0 400px;
 }
 
 .section-visualizations {
@@ -68,6 +69,7 @@
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
   height: 550px;
+  flex: 0 0 550px;
 }
 
 .viz-panel {
@@ -79,6 +81,7 @@
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
   height: 550px;
+  flex: 0 0 550px;
 }
 
 .analysis-panel {

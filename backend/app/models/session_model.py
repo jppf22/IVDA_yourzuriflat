@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
@@ -8,18 +8,15 @@ from app.data.loader import DATASTORE
 
 class SessionModel:
     def __init__(self, like_threshold: float = 4.0):
-        # sessions: session_id -> {apartment_id: rating}
-        self.sessions: Dict[str, Dict[int, float]] = {}
+        # sessions: session_id -> {apartment_id(str): rating(float)}
+        self.sessions: Dict[str, Dict[str, float]] = {}
         # ratings >= like_threshold are treated as "likes" when building the user vector
         self.like_threshold = like_threshold
 
-    def _build_id_index(self) -> Dict[int, int]:
-        """
-        Build a mapping from apartment_id (DATASTORE.df['id']) to row index
-        in DATASTORE.df / DATASTORE.X.
-        """
+    def _build_id_index(self) -> Dict[str, int]:
+        """Map apartment id (string) to row index in DATASTORE.X."""
         df = DATASTORE.df
-        return {int(r): idx for idx, r in enumerate(df["id"].astype(int).tolist())}
+        return {str(r): idx for idx, r in enumerate(df["id"].astype(str).tolist())}
 
     def _get_liked_indices(self, session_id: str) -> List[int]:
         """
@@ -34,7 +31,7 @@ class SessionModel:
         liked_indices: List[int] = []
         for apt_id, rating in ratings.items():
             if rating >= self.like_threshold:
-                row_idx = id_index.get(int(apt_id))
+                row_idx = id_index.get(str(apt_id))
                 if row_idx is not None:
                     liked_indices.append(int(row_idx))
         return liked_indices
@@ -53,21 +50,21 @@ class SessionModel:
             return None
 
         liked_vecs = X[liked_indices, :]
-        user_vec = liked_vecs.mean(axis=0)
+        # Ensure dense array
+        if hasattr(liked_vecs, 'toarray'):
+            liked_vecs = liked_vecs.toarray()
+        user_vec = np.asarray(liked_vecs).mean(axis=0)
+        user_vec = np.asarray(user_vec).ravel()
 
-        # Normalize for cosine similarity
         norm = np.linalg.norm(user_vec)
         if norm == 0:
             return None
         user_vec = user_vec / norm
         return user_vec
 
-    def add_rating(self, session_id: str, apartment_id: int, rating: float) -> None:
-        """
-        Store rating for this session. We no longer retrain a regression model;
-        recommendations are computed on-the-fly via cosine similarity.
-        """
-        self.sessions.setdefault(session_id, {})[int(apartment_id)] = float(rating)
+    def add_rating(self, session_id: str, apartment_id: Union[int, str], rating: float) -> None:
+        """Store rating for this session (apartment_id normalized to string)."""
+        self.sessions.setdefault(session_id, {})[str(apartment_id)] = float(rating)
 
     def predict_scores(self, session_id: str) -> Optional[np.ndarray]:
         """
@@ -85,8 +82,12 @@ class SessionModel:
         X = DATASTORE.X
         if X.shape[1] == 0:
             return None
-
-        scores = cosine_similarity(X, user_vec.reshape(1, -1)).ravel()
+        # Convert sparse matrices to dense if necessary
+        if hasattr(X, 'toarray'):
+            X_dense = X.toarray()
+        else:
+            X_dense = X
+        scores = cosine_similarity(X_dense, user_vec.reshape(1, -1)).ravel()
         return scores
 
     def coefficients(self, session_id: str) -> Optional[Dict[str, Any]]:
@@ -121,21 +122,25 @@ class SessionModel:
 
         results = []
         for aid in apartment_ids:
-            idx = id_index.get(int(aid))
+            idx = id_index.get(str(aid))
             if idx is None:
                 continue
-            x = X[idx, :]
-            # contribution of each feature
-            contributions = (coef * x).tolist()
-            # a simple predicted score = dot(coef, x) + intercept
-            predicted = float(np.dot(coef, x) + intercept)
-            results.append(
-                {
-                    "apartment_id": int(aid),
-                    "predicted_score": predicted,
-                    "contributions": contributions,
-                }
-            )
+            x_row = X[idx, :]
+            if hasattr(x_row, 'toarray'):
+                x_row = x_row.toarray()
+            x_vec = np.asarray(x_row).ravel()
+            contributions = (coef * x_vec).tolist()
+            predicted = float(np.dot(coef, x_vec) + intercept)
+            # preserve numeric id if possible else keep string
+            try:
+                out_id = int(aid)
+            except Exception:
+                out_id = aid  # type: ignore
+            results.append({
+                "apartment_id": out_id,
+                "predicted_score": predicted,
+                "contributions": contributions,
+            })
         return results
 
 
