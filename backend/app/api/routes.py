@@ -34,7 +34,6 @@ from app.models.session_model import SESSION_MODEL
 
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
-import numpy as np
 
 router = APIRouter()
 
@@ -198,16 +197,17 @@ def get_clusters(n_clusters: int = 5):
 
 
 @router.get("/initial-sample")
-def initial_sample(k: int = 20):
+def initial_sample(k: int = 5):
     # farthest-first greedy on feature space
     X = DATASTORE.X
     n = X.shape[0]
     if n == 0:
         return {"apartments": [], "sample_size": 0}
-    chosen = [0]
-    import numpy as np
 
-    dists = np.linalg.norm(X - X[0], axis=1)
+    start_idx = np.linalg.norm(X, axis=1).argmax()
+    chosen = [start_idx]
+    dists = np.linalg.norm(X - X[start_idx], axis=1)
+
     for _ in range(1, min(k, n)):
         idx = int(np.argmax(dists))
         chosen.append(idx)

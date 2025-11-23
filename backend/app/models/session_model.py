@@ -46,6 +46,7 @@ class SessionModel:
             return None
 
         X = DATASTORE.X
+
         if X.shape[1] == 0:
             return None
 

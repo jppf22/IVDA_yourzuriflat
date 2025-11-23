@@ -78,6 +78,11 @@ class DataStore:
                 # older sklearn fallback
                 feature_names = num_cols + list(preprocess.named_transformers_["cat"].get_feature_names_out(cat_cols))
 
+        if hasattr(X, "toarray"):  # handles sparse matrices
+            X = X.toarray()
+        else:
+            X = np.asarray(X, dtype=float)
+
         self.df = df.reset_index(drop=True)
         self.X = X
         self.feature_names = feature_names
