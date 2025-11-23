@@ -49,11 +49,13 @@ class SessionModel:
             return None
 
         X = DATASTORE.X
+
         if X.shape[1] == 0:
             return None
 
         liked_vecs = X[liked_indices, :]
         user_vec = liked_vecs.mean(axis=0)
+        user_vec = np.asarray(user_vec).ravel()
 
         # Normalize for cosine similarity
         norm = np.linalg.norm(user_vec)
