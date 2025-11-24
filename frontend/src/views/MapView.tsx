@@ -41,6 +41,7 @@ export const MapView = () => {
   const [mapStyle, setMapStyle] = useState<string>('carto-positron'); // Default clean style
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [showClusters, setShowClusters] = useState(true);
+  const [dragMode, setDragMode] = useState<'pan' | 'select'>('pan'); // Default to pan for better navigation
 
   const topRecommendationIds = topRecommendations.map((apt) => String(apt.id));
   const isModelTrained = ratingsCount >= 5;
@@ -191,7 +192,7 @@ export const MapView = () => {
     height: isMapExpanded ? window.innerHeight - 100 : 300,
     margin: { t: 0, b: 0, l: 0, r: 0 },
     hovermode: 'closest',
-    dragmode: 'select',
+    dragmode: dragMode,
     showlegend: false,
   };
 
@@ -283,6 +284,15 @@ export const MapView = () => {
             </button>
           )}
 
+          <button
+            className={`mode-toggle-button ${dragMode === 'select' ? 'active' : ''}`}
+            onClick={() => setDragMode(dragMode === 'pan' ? 'select' : 'pan')}
+            title={dragMode === 'pan' ? 'Switch to selection mode' : 'Switch to pan mode'}
+          >
+            <span className="mode-icon">{dragMode === 'pan' ? '🖱️' : '🔲'}</span>
+            <span className="mode-text">{dragMode === 'pan' ? 'Pan' : 'Select'}</span>
+          </button>
+
           {isModelTrained && (
             <label className="heatmap-toggle">
               <input
@@ -363,7 +373,13 @@ export const MapView = () => {
       <Plot
         data={traces}
         layout={layout}
-        config={{ displayModeBar: true, displaylogo: false }}
+        config={{ 
+          displayModeBar: true, 
+          displaylogo: false,
+          scrollZoom: true,
+          modeBarButtonsToAdd: [],
+          modeBarButtonsToRemove: ['select2d', 'lasso2d'],
+        }}
         onClick={handlePlotlyClick}
         onSelected={handlePlotlySelected}
         onRelayout={handlePlotlyRelayout}

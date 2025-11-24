@@ -215,6 +215,47 @@
   font-size: 1rem;
 }
 
+.mode-toggle-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: white;
+  color: #374151;
+  border: 2px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mode-toggle-button:hover {
+  border-color: #9ca3af;
+  background: #f9fafb;
+  transform: translateY(-1px);
+}
+
+.mode-toggle-button.active {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  border-color: #3b82f6;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.mode-toggle-button.active:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.mode-icon {
+  font-size: 1rem;
+}
+
+.mode-text {
+  white-space: nowrap;
+}
+
 .heatmap-toggle {
   display: flex;
   align-items: center;
@@ -405,13 +446,15 @@
 }
 
 .map-view:not(.map-expanded) .reset-selection-button,
-.map-view:not(.map-expanded) .recenter-button {
+.map-view:not(.map-expanded) .recenter-button,
+.map-view:not(.map-expanded) .mode-toggle-button {
   font-size: 0.75rem;
   padding: 0.35rem 0.5rem;
 }
 
 .map-view:not(.map-expanded) .reset-selection-button span:not(.reset-icon),
-.map-view:not(.map-expanded) .recenter-button span:last-child {
+.map-view:not(.map-expanded) .recenter-button span:last-child,
+.map-view:not(.map-expanded) .mode-text {
   display: none;
 }
 
