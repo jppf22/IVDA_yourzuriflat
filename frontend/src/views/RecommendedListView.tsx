@@ -18,7 +18,7 @@ import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorMessage } from '../components/ErrorMessage';
 import { getColorForApartment, isTopRecommendation } from '../utils/colors';
 import { formatPrice, formatDistance, formatRoomType, formatNumber } from '../utils/formatting';
-import type { Recommendation, Apartment, ApartmentsResponse } from '../api/types';
+import type { Recommendation, Apartment, ApartmentsResponse, RecommendationsResponse } from '../api/types';
 import './RecommendedListView.css';
 
 const ITEMS_PER_PAGE = 20;
@@ -136,6 +136,7 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
     ratingsCount,
     bookmarkedApartmentIds,
     toggleBookmark,
+    syncComplete,
   } = useAppStore();
 
   const [activeTab, setActiveTab] = useState<TabView>('all');
@@ -196,20 +197,35 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
   // Fetch rated apartments separately when on "rated" tab
   // Use a separate query that bypasses global filters
   const ratedApartmentIds = useMemo(() => Object.keys(currentRatings), [currentRatings]);
-  const shouldFetchRated = activeTab === 'rated' && ratedApartmentIds.length > 0;
   
   const {
     data: ratedApartmentsData,
     isLoading: isRatedApartmentsLoading,
   } = useQuery<ApartmentsResponse>({
-    queryKey: ['ratedApartments', ratedApartmentIds],
+    queryKey: ['ratedApartments', ratedApartmentIds.sort()], // Sort for stable key
     queryFn: () => 
       apiClient.get<ApartmentsResponse>('/apartments', {
         apartment_ids: ratedApartmentIds,
         limit: 2500,
       }),
-    enabled: shouldFetchRated,
+    enabled: ratedApartmentIds.length > 0, // Always fetch when there are ratings
     staleTime: 5 * 60 * 1000,
+  });
+
+  // Fetch recommendations for rated apartments to get their similarity scores
+  const {
+    data: ratedRecommendationsData,
+    isLoading: isRatedRecommendationsLoading,
+  } = useQuery<RecommendationsResponse>({
+    queryKey: ['ratedRecommendations', sessionId, ratedApartmentIds.sort(), ratingsCount],
+    queryFn: () =>
+      apiClient.get<RecommendationsResponse>('/recommendations', {
+        session_id: sessionId,
+        apartment_ids: ratedApartmentIds,
+        limit: ratedApartmentIds.length, // Get all rated apartments
+      }),
+    enabled: syncComplete && ratedApartmentIds.length > 0 && ratingsCount >= 5, // Only when model is trained
+    staleTime: 30000,
   });
 
   const recommendationsArray: Recommendation[] = useMemo(() => {
@@ -231,11 +247,18 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
 
   const recommendationScoreMap = useMemo(() => {
     const map = new Map<string, number>();
+    // Add scores from main recommendations
     recommendationsArray.forEach((rec) => {
       map.set(String(rec.apartment.id), rec.predicted_score);
     });
+    // Add scores from rated apartments query (for My Ratings tab)
+    if (ratedRecommendationsData?.recommendations) {
+      ratedRecommendationsData.recommendations.forEach((rec: Recommendation) => {
+        map.set(String(rec.apartment.id), rec.predicted_score);
+      });
+    }
     return map;
-  }, [recommendationsArray]);
+  }, [recommendationsArray, ratedRecommendationsData]);
 
   const rankingRows: DisplayRow[] = useMemo(() => {
     if (isModelRanking) {
@@ -293,10 +316,13 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
   }, [filteredRows, activeTab, displayLimit]);
 
   const totalCount = rankingRows.length;
+  
+  // Calculate ratedCount from currentRatings directly, not from rankingRows
   const ratedCount = useMemo(
-    () => rankingRows.filter((row) => currentRatings[String(row.apartment.id)] !== undefined).length,
-    [rankingRows, currentRatings]
+    () => Object.keys(currentRatings).length,
+    [currentRatings]
   );
+  
   const bookmarkedCount = useMemo(
     () => rankingRows.filter((row) => bookmarkedApartmentIds.includes(String(row.apartment.id))).length,
     [rankingRows, bookmarkedApartmentIds]
@@ -480,10 +506,12 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
       }
       const normalized = (score - scoreStats.min) / scoreStats.range;
       if (index < 5) {
-        const hue = 120 - index * 15;
-        return `hsl(${hue}, 70%, 85%)`;
+        // Top 5 recommendations: use green shades (120 hue)
+        const lightness = 85 - index * 3; // Gradually darker green
+        return `hsl(120, 70%, ${lightness}%)`;
       }
-      const hue = 60 - normalized * 60;
+      // Others: gradient from green (high score) to red (low score)
+      const hue = normalized * 120; // 0 (red) to 120 (green)
       return `hsl(${hue}, 60%, 90%)`;
     },
     [isModelRanking, scoreStats]
@@ -522,11 +550,21 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
   };
 
   const selectedRow = selectedForExplain
-    ? rankingRows.find((row) => String(row.apartment.id) === selectedForExplain)
+    ? filteredRows.find((row) => String(row.apartment.id) === selectedForExplain)
     : null;
   const selectedApartment = selectedRow?.apartment ?? null;
   const explainPredictedScore = explainData?.contributions?.[0]?.predicted_score;
   const selectedScore = selectedRow?.similarityScore ?? explainPredictedScore ?? null;
+
+  // Calculate color for selected apartment's similarity score
+  const selectedScoreColor = useMemo(() => {
+    if (!selectedForExplain || !selectedRow || selectedScore === null) {
+      return '#e5e7eb'; // Default gray
+    }
+    // Find the index in filteredRows to determine if it's a top recommendation
+    const indexInFiltered = filteredRows.findIndex((row) => String(row.apartment.id) === selectedForExplain);
+    return getScoreGradient(selectedScore, indexInFiltered);
+  }, [selectedForExplain, selectedRow, selectedScore, filteredRows, getScoreGradient]);
 
   const formatMetricValue = (row: DisplayRow, apartment: Apartment) => {
     if (isModelRanking) {
@@ -554,7 +592,7 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
     );
   }
 
-  if (activeTab === 'rated' && isRatedApartmentsLoading) {
+  if (activeTab === 'rated' && isRatedApartmentsLoading && !ratedApartmentsData) {
     return (
       <div className="recommended-list-view">
         <LoadingSpinner message="Loading your rated apartments..." />
@@ -731,7 +769,22 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
                       {apartment.beds}/{apartment.bedrooms}
                     </td>
                     <td className="col-reviews">
-                      {apartment.number_of_reviews !== undefined ? formatNumber(apartment.number_of_reviews) : '—'}
+                      {apartment.review_scores_rating !== undefined && apartment.review_scores_rating > 0 ? (
+                        <div className="review-info">
+                          <span className="review-rating" title="Average rating">
+                            ⭐ {apartment.review_scores_rating.toFixed(1)}
+                          </span>
+                          {apartment.number_of_reviews !== undefined && apartment.number_of_reviews > 0 && (
+                            <span className="review-count" title="Number of reviews">
+                              ({formatNumber(apartment.number_of_reviews)})
+                            </span>
+                          )}
+                        </div>
+                      ) : apartment.number_of_reviews !== undefined && apartment.number_of_reviews > 0 ? (
+                        <span className="review-count">{formatNumber(apartment.number_of_reviews)} reviews</span>
+                      ) : (
+                        <span className="no-reviews">No reviews</span>
+                      )}
                     </td>
                     <td className={`col-score ${isModelRanking ? '' : 'attribute-score'}`}>
                       {isModelRanking ? (
@@ -841,7 +894,15 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
                     <span>•</span>
                     <span>{formatDistance(selectedApartment.distance_from_city_center ?? 0)}</span>
                   </div>
-                  <div className="similarity-score">
+                  <div 
+                    className="similarity-score"
+                    style={{ 
+                      backgroundColor: selectedScoreColor,
+                      padding: '0.5rem',
+                      borderRadius: '4px',
+                      marginTop: '0.5rem'
+                    }}
+                  >
                     <strong>Similarity Score:</strong>{' '}
                     {selectedScore !== null ? selectedScore.toFixed(3) : '—'}
                   </div>

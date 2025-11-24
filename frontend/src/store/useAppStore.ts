@@ -72,6 +72,12 @@ export interface AppState {
   removeUserRating: (apartmentId: string) => void;
   clearAllRatings: () => void;
 
+  // Sync state (backend synchronization)
+  isSyncing: boolean;
+  setIsSyncing: (syncing: boolean) => void;
+  syncComplete: boolean;
+  setSyncComplete: (complete: boolean) => void;
+
   // Star (radar) chart dynamic attributes
   starAttributes: string[];
   setStarAttributes: (attrs: string[]) => void;
@@ -206,7 +212,13 @@ export const useAppStore = create<AppState>()(
         ratingsCount: Object.keys(newRatings).length,
       };
     }),
-  clearAllRatings: () => set({ userRatings: {}, ratingsCount: 0 }),
+  clearAllRatings: () => set({ userRatings: {}, ratingsCount: 0, calibrationComplete: false }),
+
+  // Sync state (not persisted - resets on page load)
+  isSyncing: false,
+  setIsSyncing: (syncing) => set({ isSyncing: syncing }),
+  syncComplete: false, // Will be set to true after first sync
+  setSyncComplete: (complete) => set({ syncComplete: complete }),
 
   // Star chart attributes (persisted)
   starAttributesVersion: 1,

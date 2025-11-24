@@ -133,10 +133,11 @@ npm test
 6. **Encoding in loader.py**: StandardScaler for numeric, OneHotEncoder for categorical (property_type, room_type, neighbourhood)
 
 **Final feature matrix**: `DATASTORE.X` is **dense numpy array** (2348 × ~200 features after encoding)
-- Numeric cols: price, distance_from_city_center, lat, lon, minimum_nights, maximum_nights, accommodates, bathrooms, bedrooms, beds, availability_365, number_of_reviews
+- Numeric cols: price, distance_from_city_center, lat, lon, minimum_nights, maximum_nights, accommodates, bathrooms, bedrooms, beds, availability_365
 - Categorical cols: property_type, room_type, neighbourhood, neighbourhood_group
 - Binary cols: 47 amenity features (amenity_WiFi, amenity_Kitchen, amenity_Parking, etc.)
 - **Important**: Raw `amenities` stays as string in `DATASTORE.df` for frontend parsing; model uses exploded binary features in `DATASTORE.X`
+- **Review fields excluded**: Review scores and counts (number_of_reviews, review_scores_*, etc.) are merged from listings.csv for display but NOT used in recommendations - they're informational only
 
 ### Explainability Pattern
 Content-based model using **cosine similarity**, not regression:

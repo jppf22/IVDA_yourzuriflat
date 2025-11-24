@@ -212,7 +212,7 @@ export const usePCA = (
 
 // Explainability - feature contributions
 export const useExplainability = (sessionId: string, apartmentIds?: string[], modelTrained?: boolean) => {
-  const { ratingsCount } = useAppStore();
+  const { ratingsCount, syncComplete } = useAppStore();
   const isModelReady = modelTrained ?? (ratingsCount >= 5);
   
   return useQuery<ExplainabilityResponse>({
@@ -222,7 +222,7 @@ export const useExplainability = (sessionId: string, apartmentIds?: string[], mo
         session_id: sessionId,
         apartment_ids: apartmentIds?.join(','),
       }),
-    enabled: !!sessionId && apartmentIds !== undefined && apartmentIds.length > 0 && isModelReady,
+    enabled: !!sessionId && apartmentIds !== undefined && apartmentIds.length > 0 && isModelReady && syncComplete,
     staleTime: 0,
   });
 };

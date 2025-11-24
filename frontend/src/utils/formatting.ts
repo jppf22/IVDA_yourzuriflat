@@ -13,7 +13,8 @@ export const formatDistance = (distance: number): string => {
 };
 
 // Format number with comma separators
-export const formatNumber = (num: number): string => {
+export const formatNumber = (num: number | null | undefined): string => {
+  if (num === null || num === undefined) return 'N/A';
   return num.toLocaleString('en-US');
 };
 

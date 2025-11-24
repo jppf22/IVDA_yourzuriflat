@@ -32,10 +32,19 @@ export interface Apartment {
   price: number;
   minimum_nights: number;
   maximum_nights: number;
-  // Existing legacy / additional metrics (may not be present in cleaned JSON)
+  // Review information (informational only, not used in recommendations)
   number_of_reviews?: number;
   last_review?: string;
+  first_review?: string;
   reviews_per_month?: number;
+  review_scores_rating?: number;
+  review_scores_accuracy?: number;
+  review_scores_cleanliness?: number;
+  review_scores_checkin?: number;
+  review_scores_communication?: number;
+  review_scores_location?: number;
+  review_scores_value?: number;
+  // Existing legacy / additional metrics (may not be present in cleaned JSON)
   calculated_host_listings_count?: number;
   availability_365?: number;
   distance_from_center?: number; // old naming retained if present

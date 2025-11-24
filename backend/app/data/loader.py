@@ -18,22 +18,36 @@ class DataStore:
     def _preprocess(self):
         df = self.raw.copy()
 
-        # Attach/augment image URLs from the original export (listings.csv) and coalesce
-        picture_path = os.path.join(self.base_dir, "data", "listings.csv")
-        if os.path.exists(picture_path):
+        # Attach/augment image URLs and review data from the original export (listings.csv)
+        source_csv_path = os.path.join(self.base_dir, "data", "listings.csv")
+        if os.path.exists(source_csv_path):
             try:
-                pictures = pd.read_csv(picture_path, usecols=["id", "picture_url"])
-                pictures["id"] = pictures["id"].astype(str)
+                # Load picture_url and review fields from original CSV
+                review_cols = [
+                    "id", "picture_url", 
+                    "number_of_reviews", "last_review", "first_review",
+                    "review_scores_rating", "review_scores_accuracy", 
+                    "review_scores_cleanliness", "review_scores_checkin",
+                    "review_scores_communication", "review_scores_location", 
+                    "review_scores_value", "reviews_per_month"
+                ]
+                # Only use columns that exist in the CSV
+                source_data = pd.read_csv(source_csv_path, usecols=lambda col: col in review_cols)
+                source_data["id"] = source_data["id"].astype(str)
+                
                 # Ensure id in df is string for stable join
                 if "id" in df.columns:
                     df["id"] = df["id"].astype(str)
-                # Merge with suffix to preserve any existing cleaned picture_url
-                df = df.merge(pictures, on="id", how="left", suffixes=("", "_csv"))
+                
+                # Merge with suffix to preserve any existing data
+                df = df.merge(source_data, on="id", how="left", suffixes=("", "_csv"))
+                
                 # Helper to test for valid-looking URLs
                 def _valid_url(series: pd.Series) -> pd.Series:
                     s = series.astype(str)
                     return s.str.startswith(("http://", "https://"), na=False) & s.str.strip().ne("")
-                # Coalesce: prefer existing non-empty picture_url, else CSV value
+                
+                # Coalesce picture_url: prefer existing non-empty picture_url, else CSV value
                 if "picture_url" in df.columns and "picture_url_csv" in df.columns:
                     existing = df["picture_url"]
                     from_csv = df["picture_url_csv"]
@@ -45,16 +59,59 @@ class DataStore:
                     df["picture_url"] = np.where(_valid_url(from_csv), from_csv, np.nan)
                     df.drop(columns=["picture_url_csv"], inplace=True)
                 elif "picture_url" not in df.columns:
-                    # Neither present after merge; create column
                     df["picture_url"] = np.nan
-            except Exception:
-                # On any failure, ensure column exists (frontend expects it)
+                
+                # Handle review fields - keep CSV values, add if missing
+                review_fields = [
+                    "number_of_reviews", "last_review", "first_review",
+                    "review_scores_rating", "review_scores_accuracy", 
+                    "review_scores_cleanliness", "review_scores_checkin",
+                    "review_scores_communication", "review_scores_location", 
+                    "review_scores_value", "reviews_per_month"
+                ]
+                for field in review_fields:
+                    csv_field = f"{field}_csv"
+                    if csv_field in df.columns:
+                        if field in df.columns:
+                            # Prefer CSV values over existing (CSV is source of truth)
+                            df[field] = df[csv_field]
+                        else:
+                            # Add from CSV
+                            df[field] = df[csv_field]
+                        df.drop(columns=[csv_field], inplace=True)
+                    elif field not in df.columns:
+                        # Ensure column exists even if not in CSV
+                        df[field] = np.nan
+                        
+            except Exception as e:
+                # On any failure, ensure picture_url and review columns exist
+                print(f"Warning: Could not load source CSV data: {e}")
                 if "picture_url" not in df.columns:
                     df["picture_url"] = np.nan
+                review_fields = [
+                    "number_of_reviews", "last_review", "first_review",
+                    "review_scores_rating", "review_scores_accuracy", 
+                    "review_scores_cleanliness", "review_scores_checkin",
+                    "review_scores_communication", "review_scores_location", 
+                    "review_scores_value", "reviews_per_month"
+                ]
+                for field in review_fields:
+                    if field not in df.columns:
+                        df[field] = np.nan
         else:
-            # listings.csv missing; ensure column exists
+            # listings.csv missing; ensure columns exist
             if "picture_url" not in df.columns:
                 df["picture_url"] = np.nan
+            review_fields = [
+                "number_of_reviews", "last_review", "first_review",
+                "review_scores_rating", "review_scores_accuracy", 
+                "review_scores_cleanliness", "review_scores_checkin",
+                "review_scores_communication", "review_scores_location", 
+                "review_scores_value", "reviews_per_month"
+            ]
+            for field in review_fields:
+                if field not in df.columns:
+                    df[field] = np.nan
 
         if "id" in df.columns:
             df["id"] = df["id"].astype(str)
@@ -70,13 +127,22 @@ class DataStore:
         if "amenities" in df.columns:
             df["amenities"] = df["amenities"].astype(str)
 
-        # select feature columns for ML
-        drop_cols = ['id', 'name', 'host_id', 'host_name']
+        # select feature columns for ML - exclude review fields (informational only)
+        drop_cols = ['id', 'name', 'host_id', 'host_name', 'picture_url']
+        # Add review fields to drop list - these are informational only, not for recommendations
+        review_fields_to_exclude = [
+            'number_of_reviews', 'last_review', 'first_review',
+            'review_scores_rating', 'review_scores_accuracy', 
+            'review_scores_cleanliness', 'review_scores_checkin',
+            'review_scores_communication', 'review_scores_location', 
+            'review_scores_value', 'reviews_per_month'
+        ]
+        drop_cols.extend(review_fields_to_exclude)
         drop_cols = [c for c in drop_cols if c in df.columns]
         df_model = df.drop(columns=drop_cols)
 
         num_cols = ["price", "distance_from_city_center", "latitude", "longitude", "minimum_nights", "maximum_nights",
-                "accommodates", "bathrooms", "bedrooms", "beds", "availability_365", "number_of_reviews"]
+                "accommodates", "bathrooms", "bedrooms", "beds", "availability_365"]
         num_cols = [c for c in num_cols if c in df_model.columns]
 
         cat_cols = ['property_type', 'room_type', 'neighbourhood', 'neighbourhood_group']

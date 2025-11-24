@@ -146,95 +146,176 @@ export const ApartmentDetailDrawer = ({
                 />
               </div>
 
-              {/* Details Grid */}
-              <div className="details-grid">
-                <div className="detail-item">
-                  <span className="detail-label">Property Type</span>
-                  <span className="detail-value">{apartment.property_type}</span>
-                </div>
-                <div className="detail-item">
-                  <span className="detail-label">Room Type</span>
-                  <span className="detail-value">{formatRoomType(apartment.room_type)}</span>
-                </div>
-                <div className="detail-item">
-                  <span className="detail-label">Neighbourhood Group</span>
-                  <span className="detail-value">{formatNeighbourhood(apartment.neighbourhood_group_cleansed || apartment.neighbourhood_group || '')}</span>
-                </div>
-                <div className="detail-item">
-                  <span className="detail-label">Neighbourhood</span>
-                  <span className="detail-value">{formatNeighbourhood(apartment.neighbourhood_cleansed || apartment.neighbourhood || '')}</span>
-                </div>
-                <div className="detail-item">
-                  <span className="detail-label">Distance from Center</span>
-                  <span className="detail-value">
-                    {formatDistance((apartment.distance_from_city_center || apartment.distance_from_center || 0))}
-                  </span>
-                </div>
-                <div className="detail-item">
-                  <span className="detail-label">Accommodates</span>
-                  <span className="detail-value">{apartment.accommodates}</span>
-                </div>
-                <div className="detail-item">
-                  <span className="detail-label">Bathrooms</span>
-                  <span className="detail-value">{apartment.bathrooms}</span>
-                </div>
-                <div className="detail-item">
-                  <span className="detail-label">Bedrooms</span>
-                  <span className="detail-value">{apartment.bedrooms}</span>
-                </div>
-                <div className="detail-item">
-                  <span className="detail-label">Beds</span>
-                  <span className="detail-value">{apartment.beds}</span>
-                </div>
-                <div className="detail-item">
-                  <span className="detail-label">Min Nights</span>
-                  <span className="detail-value">{apartment.minimum_nights}</span>
-                </div>
-                <div className="detail-item">
-                  <span className="detail-label">Max Nights</span>
-                  <span className="detail-value">{apartment.maximum_nights}</span>
-                </div>
-                {apartment.number_of_reviews !== undefined && (
-                  <div className="detail-item">
-                    <span className="detail-label"># Reviews</span>
-                    <span className="detail-value">{formatNumber(apartment.number_of_reviews)}</span>
+              {/* Key Information Cards */}
+              <div className="info-cards">
+                <div className="info-card">
+                  <div className="info-card-icon">🏠</div>
+                  <div className="info-card-content">
+                    <div className="info-card-label">Property</div>
+                    <div className="info-card-value">{apartment.property_type}</div>
+                    <div className="info-card-sublabel">{formatRoomType(apartment.room_type)}</div>
                   </div>
-                )}
-                {apartment.reviews_per_month && apartment.reviews_per_month > 0 && (
-                  <div className="detail-item">
-                    <span className="detail-label">Reviews / Month</span>
-                    <span className="detail-value">{apartment.reviews_per_month.toFixed(2)}</span>
-                  </div>
-                )}
-                {apartment.last_review && (
-                  <div className="detail-item">
-                    <span className="detail-label">Last Review</span>
-                    <span className="detail-value">{formatDate(apartment.last_review)}</span>
-                  </div>
-                )}
-                <div className="detail-item">
-                  <span className="detail-label">Host</span>
-                  <span className="detail-value">{apartment.host_name || 'Unknown'} (ID: {apartment.host_id})</span>
                 </div>
-                {apartment.calculated_host_listings_count !== undefined && (
-                  <div className="detail-item">
-                    <span className="detail-label">Host Listings</span>
-                    <span className="detail-value">{apartment.calculated_host_listings_count}</span>
+                <div className="info-card">
+                  <div className="info-card-icon">📍</div>
+                  <div className="info-card-content">
+                    <div className="info-card-label">Location</div>
+                    <div className="info-card-value">{formatNeighbourhood(apartment.neighbourhood_cleansed || apartment.neighbourhood || '')}</div>
+                    <div className="info-card-sublabel">{formatDistance((apartment.distance_from_city_center || apartment.distance_from_center || 0))} from center</div>
                   </div>
-                )}
-                <div className="detail-item">
-                  <span className="detail-label">Latitude</span>
-                  <span className="detail-value">{apartment.latitude.toFixed(6)}</span>
                 </div>
-                <div className="detail-item">
-                  <span className="detail-label">Longitude</span>
-                  <span className="detail-value">{apartment.longitude.toFixed(6)}</span>
+                <div className="info-card">
+                  <div className="info-card-icon">👥</div>
+                  <div className="info-card-content">
+                    <div className="info-card-label">Capacity</div>
+                    <div className="info-card-value">{apartment.accommodates} guests</div>
+                    <div className="info-card-sublabel">{apartment.bedrooms} bed · {apartment.beds} beds · {apartment.bathrooms} bath</div>
+                  </div>
                 </div>
-                <div className="detail-item amenities-span" style={{ gridColumn: 'span 2' }}>
-                  <span className="detail-label">Amenities</span>
-                  <span className="detail-value">
-                    {formatAmenities(parseAmenities(apartment.amenities))}
-                  </span>
+                <div className="info-card">
+                  <div className="info-card-icon">📅</div>
+                  <div className="info-card-content">
+                    <div className="info-card-label">Stay Duration</div>
+                    <div className="info-card-value">{apartment.minimum_nights} - {apartment.maximum_nights} nights</div>
+                    <div className="info-card-sublabel">Min - Max nights</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Review Information */}
+              {apartment.review_scores_rating !== undefined && apartment.review_scores_rating > 0 && (
+                <div className="reviews-section">
+                  <h4 className="section-title">⭐ Reviews</h4>
+                  <div className="overall-rating-card">
+                    <div className="overall-rating-score">
+                      <span className="rating-number">{apartment.review_scores_rating.toFixed(1)}</span>
+                      <span className="rating-max"> / 5.0</span>
+                    </div>
+                    <div className="overall-rating-meta">
+                      {apartment.number_of_reviews != null && (
+                        <div>{formatNumber(apartment.number_of_reviews)} reviews</div>
+                      )}
+                      {apartment.reviews_per_month && apartment.reviews_per_month > 0 && (
+                        <div>{apartment.reviews_per_month.toFixed(1)} reviews/month</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Review Score Breakdown */}
+                  {((apartment.review_scores_accuracy !== undefined && apartment.review_scores_accuracy > 0) ||
+                    (apartment.review_scores_cleanliness !== undefined && apartment.review_scores_cleanliness > 0) ||
+                    (apartment.review_scores_checkin !== undefined && apartment.review_scores_checkin > 0) ||
+                    (apartment.review_scores_communication !== undefined && apartment.review_scores_communication > 0) ||
+                    (apartment.review_scores_location !== undefined && apartment.review_scores_location > 0) ||
+                    (apartment.review_scores_value !== undefined && apartment.review_scores_value > 0)) && (
+                    <div className="review-scores-grid">
+                      {apartment.review_scores_accuracy !== undefined && apartment.review_scores_accuracy > 0 && (
+                        <div className="review-score-item">
+                          <span className="review-score-label">Accuracy</span>
+                          <span className="review-score-bar">
+                            <span className="review-score-fill" style={{ width: `${(apartment.review_scores_accuracy / 5) * 100}%` }}></span>
+                          </span>
+                          <span className="review-score-value">{apartment.review_scores_accuracy.toFixed(1)}</span>
+                        </div>
+                      )}
+                      {apartment.review_scores_cleanliness !== undefined && apartment.review_scores_cleanliness > 0 && (
+                        <div className="review-score-item">
+                          <span className="review-score-label">Cleanliness</span>
+                          <span className="review-score-bar">
+                            <span className="review-score-fill" style={{ width: `${(apartment.review_scores_cleanliness / 5) * 100}%` }}></span>
+                          </span>
+                          <span className="review-score-value">{apartment.review_scores_cleanliness.toFixed(1)}</span>
+                        </div>
+                      )}
+                      {apartment.review_scores_checkin !== undefined && apartment.review_scores_checkin > 0 && (
+                        <div className="review-score-item">
+                          <span className="review-score-label">Check-in</span>
+                          <span className="review-score-bar">
+                            <span className="review-score-fill" style={{ width: `${(apartment.review_scores_checkin / 5) * 100}%` }}></span>
+                          </span>
+                          <span className="review-score-value">{apartment.review_scores_checkin.toFixed(1)}</span>
+                        </div>
+                      )}
+                      {apartment.review_scores_communication !== undefined && apartment.review_scores_communication > 0 && (
+                        <div className="review-score-item">
+                          <span className="review-score-label">Communication</span>
+                          <span className="review-score-bar">
+                            <span className="review-score-fill" style={{ width: `${(apartment.review_scores_communication / 5) * 100}%` }}></span>
+                          </span>
+                          <span className="review-score-value">{apartment.review_scores_communication.toFixed(1)}</span>
+                        </div>
+                      )}
+                      {apartment.review_scores_location !== undefined && apartment.review_scores_location > 0 && (
+                        <div className="review-score-item">
+                          <span className="review-score-label">Location</span>
+                          <span className="review-score-bar">
+                            <span className="review-score-fill" style={{ width: `${(apartment.review_scores_location / 5) * 100}%` }}></span>
+                          </span>
+                          <span className="review-score-value">{apartment.review_scores_location.toFixed(1)}</span>
+                        </div>
+                      )}
+                      {apartment.review_scores_value !== undefined && apartment.review_scores_value > 0 && (
+                        <div className="review-score-item">
+                          <span className="review-score-label">Value</span>
+                          <span className="review-score-bar">
+                            <span className="review-score-fill" style={{ width: `${(apartment.review_scores_value / 5) * 100}%` }}></span>
+                          </span>
+                          <span className="review-score-value">{apartment.review_scores_value.toFixed(1)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Review Dates */}
+                  {(apartment.first_review || apartment.last_review) && (
+                    <div className="review-dates">
+                      {apartment.first_review && (
+                        <div className="review-date-item">
+                          <span className="review-date-label">First Review:</span>
+                          <span className="review-date-value">{formatDate(apartment.first_review)}</span>
+                        </div>
+                      )}
+                      {apartment.last_review && (
+                        <div className="review-date-item">
+                          <span className="review-date-label">Last Review:</span>
+                          <span className="review-date-value">{formatDate(apartment.last_review)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Additional Details */}
+              <div className="additional-details">
+                <h4 className="section-title">📋 Additional Details</h4>
+                <div className="details-grid">
+                  <div className="detail-item">
+                    <span className="detail-label">Neighbourhood Group</span>
+                    <span className="detail-value">{formatNeighbourhood(apartment.neighbourhood_group_cleansed || apartment.neighbourhood_group || '')}</span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="detail-label">Host</span>
+                    <span className="detail-value">{apartment.host_name || 'Unknown'} (ID: {apartment.host_id})</span>
+                  </div>
+                  {apartment.calculated_host_listings_count !== undefined && (
+                    <div className="detail-item">
+                      <span className="detail-label">Host Listings</span>
+                      <span className="detail-value">{apartment.calculated_host_listings_count}</span>
+                    </div>
+                  )}
+                  <div className="detail-item">
+                    <span className="detail-label">Coordinates</span>
+                    <span className="detail-value">{apartment.latitude.toFixed(6)}, {apartment.longitude.toFixed(6)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Amenities */}
+              <div className="amenities-section">
+                <h4 className="section-title">✨ Amenities</h4>
+                <div className="amenities-list">
+                  {formatAmenities(parseAmenities(apartment.amenities))}
                 </div>
               </div>
             </>

@@ -677,3 +677,28 @@
     transform: rotate(360deg);
   }
 }
+
+/* Review display in table */
+.review-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.125rem;
+}
+
+.review-rating {
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 0.9rem;
+}
+
+.review-count {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.no-reviews {
+  color: #9ca3af;
+  font-size: 0.85rem;
+  font-style: italic;
+}
