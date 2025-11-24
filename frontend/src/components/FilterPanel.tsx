@@ -116,6 +116,7 @@ export const FilterPanel = ({ collapsed: initialCollapsed = false }: FilterPanel
                     histogram={dist.histogram}
                     step={meta.step || 1}
                     singleMax={meta.singleMax}
+                    logScale={dist.log_scale}
                   />
                 </div>
               );

@@ -15,6 +15,7 @@ interface RangeSliderProps {
   label?: string;
   step?: number;
   singleMax?: boolean; // Only show max slider
+  logScale?: boolean; // Use logarithmic scale
 }
 
 export const RangeSlider = ({
@@ -26,6 +27,7 @@ export const RangeSlider = ({
   label,
   step = 1,
   singleMax = false,
+  logScale = false,
 }: RangeSliderProps) => {
   const [isDragging, setIsDragging] = useState<'min' | 'max' | null>(null);
   const [localValue, setLocalValue] = useState(value);
@@ -34,6 +36,20 @@ export const RangeSlider = ({
   useEffect(() => {
     setLocalValue(value);
   }, [value]);
+
+  // Helper functions for log scale conversion
+  const toLogScale = (value: number): number => {
+    if (!logScale || value <= 0) return value;
+    return Math.log10(value + 1);
+  };
+
+  const fromLogScale = (logValue: number): number => {
+    if (!logScale) return logValue;
+    return Math.pow(10, logValue) - 1;
+  };
+
+  const minLog = toLogScale(min);
+  const maxLog = toLogScale(max);
 
   const handleMouseDown = (handle: 'min' | 'max') => (e: React.MouseEvent) => {
     e.preventDefault();
@@ -45,7 +61,17 @@ export const RangeSlider = ({
 
     const rect = sliderRef.current.getBoundingClientRect();
     const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const rawValue = min + percent * (max - min);
+    
+    let rawValue: number;
+    if (logScale) {
+      // Use log scale for positioning
+      const logValue = minLog + percent * (maxLog - minLog);
+      rawValue = fromLogScale(logValue);
+    } else {
+      // Linear scale
+      rawValue = min + percent * (max - min);
+    }
+    
     const steppedValue = Math.round(rawValue / step) * step;
 
     setLocalValue((prev) => {
@@ -77,8 +103,19 @@ export const RangeSlider = ({
     }
   }, [isDragging, localValue]);
 
-  const minPercent = ((localValue[0] - min) / (max - min)) * 100;
-  const maxPercent = ((localValue[1] - min) / (max - min)) * 100;
+  // Calculate percentages for handle positions using log scale if enabled
+  let minPercent: number;
+  let maxPercent: number;
+  
+  if (logScale) {
+    const minLogVal = toLogScale(localValue[0]);
+    const maxLogVal = toLogScale(localValue[1]);
+    minPercent = ((minLogVal - minLog) / (maxLog - minLog)) * 100;
+    maxPercent = ((maxLogVal - minLog) / (maxLog - minLog)) * 100;
+  } else {
+    minPercent = ((localValue[0] - min) / (max - min)) * 100;
+    maxPercent = ((localValue[1] - min) / (max - min)) * 100;
+  }
 
   // Normalize histogram for display (max height = 100%)
   const maxHistValue = histogram.length > 0 ? Math.max(...histogram) : 1;
