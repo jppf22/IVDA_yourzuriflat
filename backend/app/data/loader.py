@@ -52,7 +52,7 @@ class DataStore:
         df_model = df.drop(columns=drop_cols)
 
         num_cols = ["price", "distance_from_city_center", "latitude", "longitude", "minimum_nights", "maximum_nights",
-                    "accommodates", "bathrooms", "bedrooms", "beds"]
+                "accommodates", "bathrooms", "bedrooms", "beds", "availability_365", "number_of_reviews"]
         num_cols = [c for c in num_cols if c in df_model.columns]
 
         cat_cols = ['property_type', 'room_type', 'neighbourhood', 'neighbourhood_group']
@@ -87,6 +87,7 @@ class DataStore:
         self.X = X
         self.feature_names = feature_names
         self.preprocess = preprocess
+        self.numeric_columns = num_cols  # expose numeric columns for client-side selection
 
     def get_apartment(self, apartment_id: int):
         # listings identified by 'id' column

@@ -240,7 +240,6 @@ def get_recommendations(
 @router.get("/pca")
 def get_pca(
     attributes: Optional[str] = Query(None),
-    mode: str = Query("pca"),
     filter_outliers: bool = Query(False),
     price_min: Optional[float] = Query(None),
     price_max: Optional[float] = Query(None),
@@ -264,7 +263,11 @@ def get_pca(
     neighbourhoods: Optional[List[str]] = Query(None),
     neighbourhood_groups: Optional[List[str]] = Query(None),
 ):
-    # Build filters dict (reuse semantics from apartments endpoint)
+    # Parse attribute list (only keep numeric columns)
+    requested = [a.strip() for a in attributes.split(',')] if attributes else []
+    numeric_cols_available = set(getattr(DATASTORE, 'numeric_columns', []))
+    selected = [c for c in requested if c in numeric_cols_available]
+    # Build filters dict (reuse semantics)
     filters = {}
     for name, val in [
         ("price_min", price_min), ("price_max", price_max),
@@ -290,33 +293,44 @@ def get_pca(
         filters["neighbourhood_groups"] = neighbourhood_groups
 
     df_filtered = DATASTORE.filter_df(filters)
-    if df_filtered.shape[0] == 0:
-        return {"points": [], "x_label": "", "y_label": "", "mode": mode}
+    if df_filtered.shape[0] == 0 or len(selected) < 2:
+        return {"points": [], "x_label": "", "y_label": "", "mode": "empty"}
 
-    # Transform subset using existing fitted preprocess
-    drop_cols = ['id', 'name', 'host_id', 'host_name']
-    drop_cols = [c for c in drop_cols if c in df_filtered.columns]
-    df_model = df_filtered.drop(columns=drop_cols)
-    try:
-        X_sub = DATASTORE.preprocess.transform(df_model)
-        if hasattr(X_sub, 'toarray'):
-            X_sub = X_sub.toarray()
-    except Exception:
-        # fallback: no features
-        X_sub = np.zeros((df_filtered.shape[0], 0))
+    # Raw 2D scatter when exactly two attributes selected
+    if len(selected) == 2:
+        a1, a2 = selected
+        # Optionally filter outliers if requested (simple IQR filter per axis)
+        plot_df = df_filtered[[a1, a2, 'id']].dropna()
+        if filter_outliers:
+            def _iqr_mask(s):
+                q1 = s.quantile(0.25)
+                q3 = s.quantile(0.75)
+                iqr = q3 - q1
+                return (s >= q1 - 1.5 * iqr) & (s <= q3 + 1.5 * iqr)
+            mask = _iqr_mask(plot_df[a1]) & _iqr_mask(plot_df[a2])
+            plot_df = plot_df[mask]
+        points = []
+        for _, row in plot_df.iterrows():
+            apt = df_filtered[df_filtered['id'] == row['id']].iloc[0]
+            points.append({"apartment_id": str(row['id']), "x": float(row[a1]), "y": float(row[a2]), "apartment": apt.to_dict()})
+        payload = {"points": points, "x_label": a1, "y_label": a2, "mode": "raw"}
+        return JSONResponse(content=_sanitize_for_json(jsonable_encoder(payload)))
 
-    if X_sub.shape[1] == 0:
-        return {"points": [], "x_label": "", "y_label": "", "mode": mode}
-
+    # PCA for >2 attributes
+    plot_df = df_filtered[selected + ['id']].dropna()
+    if plot_df.shape[0] == 0:
+        return {"points": [], "x_label": "", "y_label": "", "mode": "pca"}
+    X_sub = plot_df[selected].to_numpy(dtype=float)
+    # simple standardization
+    X_sub = (X_sub - X_sub.mean(axis=0)) / (X_sub.std(axis=0) + 1e-9)
     pca = PCA(n_components=2)
     coords = pca.fit_transform(X_sub)
     points = []
     for idx, row in enumerate(coords):
-        apt = df_filtered.iloc[idx]
-        points.append({"apartment_id": str(apt["id"]), "x": float(row[0]), "y": float(row[1]), "apartment": apt.to_dict()})
-    payload = {"points": points, "x_label": "PC1", "y_label": "PC2", "explained_variance": pca.explained_variance_ratio_.tolist(), "mode": mode}
-    encoded = jsonable_encoder(payload)
-    return JSONResponse(content=_sanitize_for_json(encoded))
+        apt = df_filtered[df_filtered['id'] == plot_df.iloc[idx]['id']].iloc[0]
+        points.append({"apartment_id": str(plot_df.iloc[idx]['id']), "x": float(row[0]), "y": float(row[1]), "apartment": apt.to_dict()})
+    payload = {"points": points, "x_label": "", "y_label": "", "explained_variance": pca.explained_variance_ratio_.tolist(), "mode": "pca"}
+    return JSONResponse(content=_sanitize_for_json(jsonable_encoder(payload)))
 
 
 @router.get("/explainability")

@@ -135,13 +135,11 @@ export const useRecommendations = (sessionId: string, limit: number = 20) => {
 // PCA or raw attribute scatter data
 export const usePCA = (
   attributes?: string[],
-  mode: 'pca' | 'raw' = 'raw',
   outliers: boolean = false
 ) => {
   const { filters } = useAppStore();
   const derived: Record<string, unknown> = {
     attributes: attributes?.join(','),
-    mode,
     filter_outliers: outliers,
   };
   const pushIf = (key: string, value: unknown) => {
@@ -175,7 +173,7 @@ export const usePCA = (
 
   const filterSig = JSON.stringify(derived, Object.keys(derived).sort());
   return useQuery<PCAResponse>({
-    queryKey: queryKeys.pca(attributes, mode, outliers, filterSig),
+    queryKey: queryKeys.pca(attributes, undefined, outliers, filterSig),
     queryFn: () => apiClient.get<PCAResponse>('/pca', derived),
     enabled: true,
     staleTime: 5 * 60 * 1000,

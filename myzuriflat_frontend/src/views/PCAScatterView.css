@@ -68,3 +68,140 @@
   text-align: center;
   color: #6b7280;
 }
+
+/* Multi-select attribute chooser */
+.attr-multiselect {
+  position: relative;
+  font-size: 0.85rem;
+}
+
+.attr-multiselect .selected-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  min-height: 34px;
+  padding: 4px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #ffffff;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.attr-multiselect .selected-tags:focus-within,
+.attr-multiselect .selected-tags:hover {
+  border-color: #9ca3af;
+}
+
+.attr-multiselect .placeholder {
+  color: #9ca3af;
+}
+
+.attr-multiselect .tag {
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  color: #374151;
+  white-space: nowrap;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attr-multiselect .tag:hover {
+  background: #e5e7eb;
+}
+
+.attr-multiselect .toggle-button {
+  margin-left: auto;
+  font-size: 0.6rem;
+  opacity: 0.6;
+}
+
+.attr-multiselect .dropdown-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  width: 260px;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  padding: 8px 8px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.attr-multiselect .attr-filter {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.attr-multiselect .attr-filter:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+.attr-multiselect .attr-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.attr-multiselect .attr-list li button {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  cursor: pointer;
+  color: #374151;
+}
+
+.attr-multiselect .attr-list li button.selected {
+  background: #3b82f6;
+  color: #ffffff;
+}
+
+.attr-multiselect .attr-list li button:hover:not(.selected) {
+  background: #f3f4f6;
+}
+
+.attr-multiselect .attr-list .empty {
+  padding: 4px 6px;
+  font-size: 0.7rem;
+  color: #6b7280;
+}
+
+.attr-multiselect .dropdown-footer button {
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  cursor: pointer;
+}
+
+.attr-multiselect .dropdown-footer button:hover:not(:disabled) {
+  background: #e5e7eb;
+}
+
+.attr-multiselect .dropdown-footer small {
+  font-size: 0.6rem;
+  color: #6b7280;
+  align-self: center;
+}

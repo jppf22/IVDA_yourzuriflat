@@ -133,7 +133,7 @@ export const useAppStore = create<AppState>()(
   setPcaMode: (mode) => set({ pcaMode: mode }),
 
   // PCA attributes
-  pcaAttributes: ['price', 'distance_from_center'],
+  pcaAttributes: ['price', 'distance_from_city_center'],
   setPcaAttributes: (attributes) => set({ pcaAttributes: attributes }),
 
   // Outlier filtering

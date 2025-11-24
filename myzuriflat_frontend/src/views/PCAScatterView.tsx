@@ -3,7 +3,7 @@
  * Visualizes apartments in 2D space using raw attributes or PCA components
  */
 
-import { useState } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import Plot from 'react-plotly.js';
 import { useAppStore } from '../store/useAppStore';
 import { usePCA } from '../api/hooks';
@@ -14,19 +14,21 @@ import { formatAttributeName } from '../utils/formatting';
 import type { Data, Layout } from 'plotly.js';
 import './PCAScatterView.css';
 
-const AVAILABLE_ATTRIBUTES = [
+// Fallback attribute candidates; will be extended dynamically from top recommendations
+const BASE_CANDIDATES = [
   'price',
-  'distance_from_center',
+  'distance_from_city_center',
   'minimum_nights',
-  'number_of_reviews',
+  'accommodates',
+  'bedrooms',
+  'bathrooms',
+  'beds',
   'availability_365',
-  'calculated_host_listings_count',
+  'number_of_reviews',
 ];
 
 export const PCAScatterView = () => {
   const {
-    pcaMode,
-    setPcaMode,
     pcaAttributes,
     setPcaAttributes,
     filterOutliers,
@@ -37,23 +39,25 @@ export const PCAScatterView = () => {
     setBrushedApartmentIds,
     openDetailDrawer,
   } = useAppStore();
+  const attributes = pcaAttributes.length ? pcaAttributes : ['price','distance_from_city_center'];
 
-  const [xAttribute, setXAttribute] = useState(pcaAttributes[0] || 'price');
-  const [yAttribute, setYAttribute] = useState(pcaAttributes[1] || 'distance_from_center');
-
-  // Update store when attributes change
-  const handleAttributeChange = (x: string, y: string) => {
-    setXAttribute(x);
-    setYAttribute(y);
-    setPcaAttributes([x, y]);
-  };
+  // Build dynamic attribute candidate list from first recommendation
+  const dynamicCandidates = useMemo(() => {
+    const sample = topRecommendations[0] as Record<string, unknown> | undefined;
+    if (!sample) return BASE_CANDIDATES;
+    const exclude = new Set(['id','name','host_id','host_name','latitude','longitude','amenities','picture_url']);
+    const numericKeys = Object.keys(sample)
+      .filter(k => !exclude.has(k) && typeof sample[k] === 'number')
+      .filter(k => !BASE_CANDIDATES.includes(k));
+    return Array.from(new Set([...BASE_CANDIDATES, ...numericKeys]));
+  }, [topRecommendations]);
 
   const {
     data: pcaData,
     isLoading,
     isError,
     refetch,
-  } = usePCA(pcaAttributes, pcaMode, filterOutliers);
+  } = usePCA(attributes, filterOutliers);
 
   const topRecommendationIds = topRecommendations.map((apt) => apt.id);
 
@@ -83,7 +87,7 @@ export const PCAScatterView = () => {
     );
   }
 
-  const { points, x_label, y_label } = pcaData;
+  const { points, x_label, y_label, mode } = pcaData as any;
 
   // Prepare Plotly trace
   const trace: Data = {
@@ -114,8 +118,8 @@ export const PCAScatterView = () => {
   };
 
   const layout: Partial<Layout> = {
-    xaxis: { title: { text: x_label } },
-    yaxis: { title: { text: y_label } },
+    xaxis: mode === 'raw' ? { title: { text: x_label } } : { title: '' },
+    yaxis: mode === 'raw' ? { title: { text: y_label } } : { title: '' },
     height: 500,
     margin: { t: 40, b: 60, l: 60, r: 40 },
     hovermode: 'closest',
@@ -144,49 +148,13 @@ export const PCAScatterView = () => {
   return (
     <div className="pca-scatter-view">
       <div className="scatter-header">
-        <h3>Attribute Scatter Plot</h3>
+        <h3>Attribute Scatter / PCA</h3>
         <div className="scatter-controls">
-          {/* Mode Toggle */}
-          <div className="control-group">
-            <label>Mode:</label>
-            <select value={pcaMode} onChange={(e) => setPcaMode(e.target.value as 'pca' | 'raw')}>
-              <option value="raw">Raw Attributes</option>
-              <option value="pca">PCA Components</option>
-            </select>
-          </div>
-
-          {/* Attribute Selection (only for raw mode) */}
-          {pcaMode === 'raw' && (
-            <>
-              <div className="control-group">
-                <label>X-Axis:</label>
-                <select
-                  value={xAttribute}
-                  onChange={(e) => handleAttributeChange(e.target.value, yAttribute)}
-                >
-                  {AVAILABLE_ATTRIBUTES.map((attr) => (
-                    <option key={attr} value={attr}>
-                      {formatAttributeName(attr)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="control-group">
-                <label>Y-Axis:</label>
-                <select
-                  value={yAttribute}
-                  onChange={(e) => handleAttributeChange(xAttribute, e.target.value)}
-                >
-                  {AVAILABLE_ATTRIBUTES.map((attr) => (
-                    <option key={attr} value={attr}>
-                      {formatAttributeName(attr)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </>
-          )}
+          <AttributeMultiSelect
+            candidates={dynamicCandidates}
+            selected={attributes}
+            onChange={(next) => setPcaAttributes(next)}
+          />
 
           {/* Outlier Filter */}
           <div className="control-group">
@@ -215,3 +183,60 @@ export const PCAScatterView = () => {
 };
 
 export default PCAScatterView;
+
+interface AttributeMultiSelectProps {
+  candidates: string[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+}
+
+const AttributeMultiSelect = ({ candidates, selected, onChange }: AttributeMultiSelectProps) => {
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState('');
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (!containerRef.current) return;
+      if (!containerRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+  const filtered = useMemo(() => candidates.filter(c => c.toLowerCase().includes(filter.toLowerCase())), [candidates, filter]);
+  return (
+    <div className="attr-multiselect" ref={containerRef} style={{minWidth:'240px'}}>
+      <div className="selected-tags" role="button" aria-expanded={open} onClick={() => setOpen(o=>!o)}>
+        {selected.length === 0 && <span className="placeholder">Select attributes…</span>}
+        {selected.map(s => <span key={s} className="tag" title={s}>{s}</span>)}
+        <span className="toggle-button">{open ? '▲' : '▼'}</span>
+      </div>
+      {open && (
+        <div className="dropdown-panel">
+          <input className="attr-filter" placeholder="Filter…" value={filter} onChange={e=>setFilter(e.target.value)} />
+          <ul className="attr-list" role="listbox" aria-multiselectable="true">
+            {filtered.map(attr => {
+              const isSelected = selected.includes(attr);
+              return (
+                <li key={attr}>
+                  <button
+                    type="button"
+                    className={isSelected ? 'selected' : ''}
+                    onClick={() => {
+                      if (isSelected) onChange(selected.filter(a=>a!==attr));
+                      else onChange([...selected, attr]);
+                    }}
+                  >{isSelected ? '✓ ' : ''}{attr}</button>
+                </li>
+              );
+            })}
+            {filtered.length === 0 && <li className="empty">No matches</li>}
+          </ul>
+          <div className="dropdown-footer" style={{display:'flex',justifyContent:'space-between'}}>
+            <button type="button" onClick={()=>onChange([])} disabled={selected.length===0}>Clear</button>
+            <small>{selected.length} selected ({selected.length===2 ? 'Raw scatter' : selected.length>2 ? 'PCA' : 'Pick ≥2'})</small>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
