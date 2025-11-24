@@ -1,24 +1,51 @@
 /**
- * Recommended List View (T1 - Identify suitable apartments, T4 - Calibration)
- * Displays apartments sorted by model preference score with inline rating controls
- * Includes integrated explainability panel for seamless user experience
+ * Recommended List View (T1 - Identify, T4 - Calibrate)
+ * Default ranking uses personalized cosine similarity, with optional attribute-based rankings.
  */
 
-import { useAppStore } from '../store/useAppStore';
-import { useRecommendations, useInitialSample, useExplainability } from '../api/hooks';
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import { useAppStore } from '../store/useAppStore';
+import {
+  useRecommendations,
+  useInitialSample,
+  useExplainability,
+  useApartments,
+} from '../api/hooks';
 import { RatingControl } from '../components/RatingControl';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorMessage } from '../components/ErrorMessage';
 import { getColorForApartment, isTopRecommendation } from '../utils/colors';
-import {
-  formatPrice,
-  formatDistance,
-  formatRoomType,
-  formatNumber,
-} from '../utils/formatting';
+import { formatPrice, formatDistance, formatRoomType, formatNumber } from '../utils/formatting';
+import type { Recommendation, Apartment } from '../api/types';
 import './RecommendedListView.css';
-import type { Recommendation } from '../api/types';
+
+const ITEMS_PER_PAGE = 20;
+
+type RankingOptionId =
+  | 'model'
+  | 'price_low_high'
+  | 'price_high_low'
+  | 'distance_low_high'
+  | 'reviews_high_low'
+  | 'beds_high_low';
+
+interface RankingOption {
+  id: RankingOptionId;
+  label: string;
+  type: 'model' | 'attribute';
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+  scoreLabel: string;
+  getMetricValue?: (apartment: Apartment) => number | null | undefined;
+  formatMetric?: (value: number | null | undefined, apartment: Apartment) => string;
+  description?: string;
+}
+
+interface DisplayRow {
+  apartment: Apartment;
+  similarityScore?: number;
+  metricValue?: number | null;
+}
 
 interface RecommendedListViewProps {
   onRate: (apartmentId: string, rating: number) => void;
@@ -27,6 +54,73 @@ interface RecommendedListViewProps {
 }
 
 type TabView = 'all' | 'rated' | 'bookmarked';
+
+const RANKING_OPTIONS: RankingOption[] = [
+  {
+    id: 'model',
+    label: 'Model Recommendations',
+    type: 'model',
+    scoreLabel: 'Similarity Score',
+    description: 'Personalized ranking based on your ratings.',
+  },
+  {
+    id: 'price_low_high',
+    label: 'Price (Low → High)',
+    type: 'attribute',
+    sortBy: 'price',
+    sortOrder: 'asc',
+    scoreLabel: 'Nightly Price',
+    getMetricValue: (apartment) => apartment.price,
+    formatMetric: (value) => (typeof value === 'number' ? formatPrice(value) : '—'),
+    description: 'Sorts the list by nightly price from least to most expensive.',
+  },
+  {
+    id: 'price_high_low',
+    label: 'Price (High → Low)',
+    type: 'attribute',
+    sortBy: 'price',
+    sortOrder: 'desc',
+    scoreLabel: 'Nightly Price',
+    getMetricValue: (apartment) => apartment.price,
+    formatMetric: (value) => (typeof value === 'number' ? formatPrice(value) : '—'),
+    description: 'Sorts the list by nightly price from most to least expensive.',
+  },
+  {
+    id: 'distance_low_high',
+    label: 'Distance to Center (Near → Far)',
+    type: 'attribute',
+    sortBy: 'distance_from_city_center',
+    sortOrder: 'asc',
+    scoreLabel: 'Distance to Center',
+    getMetricValue: (apartment) =>
+      apartment.distance_from_city_center ?? (apartment.distance_from_center as number | undefined) ?? null,
+    formatMetric: (_value, apartment) =>
+      formatDistance(apartment.distance_from_city_center ?? apartment.distance_from_center ?? 0),
+    description: 'Highlights listings closest to Zurich city center first.',
+  },
+  {
+    id: 'reviews_high_low',
+    label: 'Reviews (Most → Fewest)',
+    type: 'attribute',
+    sortBy: 'number_of_reviews',
+    sortOrder: 'desc',
+    scoreLabel: 'Number of Reviews',
+    getMetricValue: (apartment) => apartment.number_of_reviews ?? 0,
+    formatMetric: (value) => (typeof value === 'number' ? formatNumber(value) : '—'),
+    description: 'Surface the most-reviewed listings to understand popularity.',
+  },
+  {
+    id: 'beds_high_low',
+    label: 'Beds (Most → Fewest)',
+    type: 'attribute',
+    sortBy: 'beds',
+    sortOrder: 'desc',
+    scoreLabel: 'Beds Available',
+    getMetricValue: (apartment) => apartment.beds ?? 0,
+    formatMetric: (value) => (typeof value === 'number' ? value.toString() : '—'),
+    description: 'Focus on listings that offer the highest sleeping capacity.',
+  },
+];
 
 export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: RecommendedListViewProps) => {
   const {
@@ -42,24 +136,37 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
     toggleBookmark,
   } = useAppStore();
 
-  // Local state for tabs and explainability panel
   const [activeTab, setActiveTab] = useState<TabView>('all');
+  const [selectedRankingId, setSelectedRankingId] = useState<RankingOptionId>('model');
+  const rankingOption = useMemo(
+    () => RANKING_OPTIONS.find((option) => option.id === selectedRankingId) ?? RANKING_OPTIONS[0],
+    [selectedRankingId]
+  );
+  const isModelRanking = rankingOption.type === 'model';
+
   const [showExplainability, setShowExplainability] = useState(false);
   const [selectedForExplain, setSelectedForExplain] = useState<string | null>(null);
-  
-  // Pagination state for infinite scroll
-  const [displayLimit, setDisplayLimit] = useState(20);
+
+  const [displayLimit, setDisplayLimit] = useState(ITEMS_PER_PAGE);
+  const [modelLimit, setModelLimit] = useState(ITEMS_PER_PAGE);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const scrollPositionRef = useRef<number>(0);
 
+  useEffect(() => {
+    if (isModelRanking) {
+      setModelLimit(displayLimit);
+    }
+  }, [isModelRanking, displayLimit]);
+
   const {
     data: recommendationsData,
-    isLoading,
-    isError,
+    isLoading: isRecommendationsLoading,
+    isError: isRecommendationsError,
     refetch,
-  } = useRecommendations(sessionId, displayLimit, ratingsCount);
+  } = useRecommendations(sessionId, modelLimit, ratingsCount);
 
   const {
     data: initialSampleData,
@@ -67,52 +174,115 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
     isError: isInitialSampleError,
   } = useInitialSample();
 
-  // Memoize recommendation array safely
+  const sortParams = useMemo(() => {
+    if (!isModelRanking && rankingOption.sortBy) {
+      return {
+        sort_by: rankingOption.sortBy,
+        sort_order: rankingOption.sortOrder ?? 'asc',
+        limit: 2500,
+      } as const;
+    }
+    return undefined;
+  }, [isModelRanking, rankingOption]);
+
+  const {
+    data: apartmentsData,
+    isLoading: isApartmentsLoading,
+    isError: isApartmentsError,
+  } = useApartments(sortParams);
+
   const recommendationsArray: Recommendation[] = useMemo(() => {
-    if (!recommendationsData || !Array.isArray(recommendationsData.recommendations)) return [];
+    if (!recommendationsData || !Array.isArray(recommendationsData.recommendations)) {
+      return [];
+    }
     return recommendationsData.recommendations as Recommendation[];
   }, [recommendationsData]);
 
-  // Prepare display recommendations (before any early returns)
   const fallbackRecommendations: Recommendation[] = useMemo(() => {
-    if (!initialSampleData || !Array.isArray(initialSampleData.apartments)) return [];
-    return initialSampleData.apartments.map((apt) => ({ apartment: apt, predicted_score: 0 as number }));
+    if (!initialSampleData || !Array.isArray(initialSampleData.apartments)) {
+      return [];
+    }
+    return initialSampleData.apartments.map((apartment) => ({
+      apartment,
+      predicted_score: 0,
+    }));
   }, [initialSampleData]);
 
-  const hasRecommendations = recommendationsArray.length > 0;
-  const displayRecommendations = hasRecommendations ? recommendationsArray : fallbackRecommendations;
+  const recommendationScoreMap = useMemo(() => {
+    const map = new Map<string, number>();
+    recommendationsArray.forEach((rec) => {
+      map.set(String(rec.apartment.id), rec.predicted_score);
+    });
+    return map;
+  }, [recommendationsArray]);
 
-  // Filter recommendations based on active tab (must be before early returns)
-  const filteredRecommendations = useMemo(() => {
+  const rankingRows: DisplayRow[] = useMemo(() => {
+    if (isModelRanking) {
+      const source = recommendationsArray.length > 0 ? recommendationsArray : fallbackRecommendations;
+      return source.map((rec) => ({
+        apartment: rec.apartment,
+        similarityScore: rec.predicted_score,
+        metricValue: rec.predicted_score,
+      }));
+    }
+    const apartments = apartmentsData?.apartments ?? [];
+    return apartments.map((apartment) => {
+      const metric = rankingOption.getMetricValue?.(apartment) ?? null;
+      return {
+        apartment,
+        metricValue: metric,
+        similarityScore: recommendationScoreMap.get(String(apartment.id)) ?? undefined,
+      };
+    });
+  }, [
+    isModelRanking,
+    recommendationsArray,
+    fallbackRecommendations,
+    apartmentsData,
+    rankingOption,
+    recommendationScoreMap,
+  ]);
+
+  const filteredRows = useMemo(() => {
     if (activeTab === 'rated') {
-      return displayRecommendations.filter(r => 
-        currentRatings[String(r.apartment.id)] !== undefined
-      );
+      return rankingRows.filter((row) => currentRatings[String(row.apartment.id)] !== undefined);
     }
     if (activeTab === 'bookmarked') {
-      return displayRecommendations.filter(r => 
-        bookmarkedApartmentIds.includes(String(r.apartment.id))
-      );
+      return rankingRows.filter((row) => bookmarkedApartmentIds.includes(String(row.apartment.id)));
     }
-    return displayRecommendations;
-  }, [displayRecommendations, activeTab, currentRatings, bookmarkedApartmentIds]);
+    return rankingRows;
+  }, [rankingRows, activeTab, currentRatings, bookmarkedApartmentIds]);
 
-  // Count for each tab
-  const ratedCount = useMemo(() => 
-    displayRecommendations.filter(r => 
-      currentRatings[String(r.apartment.id)] !== undefined
-    ).length,
-    [displayRecommendations, currentRatings]
+  const visibleRows = useMemo(() => {
+    if (activeTab === 'all') {
+      return filteredRows.slice(0, displayLimit);
+    }
+    return filteredRows;
+  }, [filteredRows, activeTab, displayLimit]);
+
+  const totalCount = rankingRows.length;
+  const ratedCount = useMemo(
+    () => rankingRows.filter((row) => currentRatings[String(row.apartment.id)] !== undefined).length,
+    [rankingRows, currentRatings]
+  );
+  const bookmarkedCount = useMemo(
+    () => rankingRows.filter((row) => bookmarkedApartmentIds.includes(String(row.apartment.id))).length,
+    [rankingRows, bookmarkedApartmentIds]
   );
 
-  const bookmarkedCount = useMemo(() => 
-    displayRecommendations.filter(r => 
-      bookmarkedApartmentIds.includes(String(r.apartment.id))
-    ).length,
-    [displayRecommendations, bookmarkedApartmentIds]
+  const rankLookup = useMemo(() => {
+    const map = new Map<string, number>();
+    rankingRows.forEach((row, index) => {
+      map.set(String(row.apartment.id), index);
+    });
+    return map;
+  }, [rankingRows]);
+
+  const topRecommendationIds = useMemo(
+    () => topRecommendations.map((apartment) => String(apartment.id)),
+    [topRecommendations]
   );
 
-  // Explainability for selected apartment
   const isModelReady = ratingsCount >= 5;
   const {
     data: explainData,
@@ -123,107 +293,220 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
     isModelReady
   );
 
-  const calibrationComplete = useAppStore((s) => s.calibrationComplete);
-  const setCalibrationComplete = useAppStore((s) => s.setCalibrationComplete);
+  const calibrationComplete = useAppStore((state) => state.calibrationComplete);
+  const setCalibrationComplete = useAppStore((state) => state.setCalibrationComplete);
 
-  // Auto-show explainability panel after calibration (5+ ratings) - only once
   useEffect(() => {
     if (
-      !calibrationComplete &&              // only if we haven't marked it complete yet
+      !calibrationComplete &&
       ratingsCount >= 5 &&
       recommendationsArray.length > 0 &&
-      !showExplainability
+      !showExplainability &&
+      selectedRankingId === 'model'
     ) {
       setShowExplainability(true);
-      setCalibrationComplete(true);        // latch: don't auto-open again
-
+      setCalibrationComplete(true);
       if (!selectedForExplain && recommendationsArray[0]) {
         setSelectedForExplain(String(recommendationsArray[0].apartment.id));
       }
     }
-  }, [ratingsCount, calibrationComplete, showExplainability]);
+  }, [
+    calibrationComplete,
+    ratingsCount,
+    recommendationsArray,
+    showExplainability,
+    selectedForExplain,
+    selectedRankingId,
+    setCalibrationComplete,
+  ]);
 
-  // Update top recommendations in an effect (avoid state change during render)
   useEffect(() => {
-    if (recommendationsArray.length > 0) {
-      const topApts = recommendationsArray.slice(0, 5).map((r) => r.apartment);
-      if (JSON.stringify(topApts) !== JSON.stringify(topRecommendations)) {
-        setTopRecommendations(topApts);
-      }
+    if (selectedRankingId !== 'model' || recommendationsArray.length === 0) {
+      return;
     }
-  }, [recommendationsArray, topRecommendations, setTopRecommendations]);
+    const plannedTop = recommendationsArray.slice(0, 5).map((item) => item.apartment);
+    const changed =
+      plannedTop.length !== topRecommendations.length ||
+      plannedTop.some((apartment, index) => String(apartment.id) !== String(topRecommendations[index]?.id));
+    if (changed) {
+      setTopRecommendations(plannedTop);
+    }
+  }, [selectedRankingId, recommendationsArray, topRecommendations, setTopRecommendations]);
 
-  // Reset displayLimit when tab changes
   useEffect(() => {
-    setDisplayLimit(20);
-  }, [activeTab]);
+    setDisplayLimit(ITEMS_PER_PAGE);
+  }, [activeTab, selectedRankingId]);
 
-  // Preserve scroll position during updates
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (container && scrollPositionRef.current > 0) {
-      // Restore scroll position after React has updated the DOM
       requestAnimationFrame(() => {
-        container.scrollTop = scrollPositionRef.current;
+        if (scrollPositionRef.current) {
+          container.scrollTop = scrollPositionRef.current;
+        }
       });
     }
-  }, [recommendationsArray, filteredRecommendations]);
+  }, [visibleRows]);
 
-  // Save scroll position before potential updates
   const saveScrollPosition = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (container) {
-      scrollPositionRef.current = container.scrollTop;
+    if (scrollContainerRef.current) {
+      scrollPositionRef.current = scrollContainerRef.current.scrollTop;
     }
   }, []);
 
-  // Infinite scroll: Load more items when scrolling near bottom
+  const isPrimaryLoading = isModelRanking ? isRecommendationsLoading : isApartmentsLoading;
+
   const loadMoreItems = useCallback(() => {
-    if (isLoadingMore || isLoading) return;
-    
-    // Only trigger for 'all' tab - other tabs have finite lists
-    if (activeTab !== 'all') return;
-    
-    const currentFetched = recommendationsArray.length;
-    const currentDisplayed = filteredRecommendations.length;
-    const currentLimit = displayLimit;
-    
-    // Only load more if we've hit our current limit AND displaying all items
-    if (currentFetched >= currentLimit && currentDisplayed >= currentLimit) {
+    if (isLoadingMore || isPrimaryLoading) {
+      return;
+    }
+    if (activeTab !== 'all') {
+      return;
+    }
+
+    if (isModelRanking) {
+      if (recommendationsArray.length < modelLimit) {
+        return;
+      }
       saveScrollPosition();
       setIsLoadingMore(true);
-      setDisplayLimit(prev => prev + 20);
-      setTimeout(() => setIsLoadingMore(false), 300);
+      setDisplayLimit((prev) => prev + ITEMS_PER_PAGE);
+      return;
     }
-  }, [isLoadingMore, isLoading, activeTab, recommendationsArray.length, filteredRecommendations.length, displayLimit, saveScrollPosition]);
 
-  // Setup intersection observer for infinite scroll
+    if (displayLimit >= totalCount) {
+      return;
+    }
+
+    saveScrollPosition();
+    setIsLoadingMore(true);
+    setDisplayLimit((prev) => Math.min(prev + ITEMS_PER_PAGE, totalCount));
+    setTimeout(() => setIsLoadingMore(false), 200);
+  }, [
+    isLoadingMore,
+    isPrimaryLoading,
+    activeTab,
+    isModelRanking,
+    recommendationsArray.length,
+    modelLimit,
+    saveScrollPosition,
+    displayLimit,
+    totalCount,
+  ]);
+
+  useEffect(() => {
+    if (!isRecommendationsLoading) {
+      setIsLoadingMore(false);
+    }
+  }, [isRecommendationsLoading]);
+
+  useEffect(() => {
+    if (!isModelRanking) {
+      setIsLoadingMore(false);
+    }
+  }, [isModelRanking]);
+
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
-        const first = entries[0];
-        if (first.isIntersecting) {
+        const entry = entries[0];
+        if (entry?.isIntersecting) {
           loadMoreItems();
         }
       },
-      { threshold: 0.1, rootMargin: '100px' }
+      { threshold: 0.1, rootMargin: '160px' }
     );
 
-    const currentRef = loadMoreRef.current;
-    if (currentRef) {
-      observer.observe(currentRef);
+    const target = loadMoreRef.current;
+    if (target) {
+      observer.observe(target);
     }
-
     return () => {
-      if (currentRef) {
-        observer.unobserve(currentRef);
+      if (target) {
+        observer.unobserve(target);
       }
     };
   }, [loadMoreItems]);
 
-  const topRecommendationIds = topRecommendations.map((apt) => String(apt.id));
+  const modelTrained = recommendationsData?.model_trained ?? false;
 
-  if (isLoading && !isInitialSampleLoading) {
+  const scoreStats = useMemo(() => {
+    if (!isModelRanking || filteredRows.length === 0) {
+      return { min: 0, max: 1, range: 1 };
+    }
+    const values = filteredRows.map((row) => row.similarityScore ?? 0);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = max - min || 1;
+    return { min, max, range };
+  }, [isModelRanking, filteredRows]);
+
+  const getScoreGradient = useCallback(
+    (score: number, index: number) => {
+      if (!isModelRanking) {
+        return '#e5e7eb';
+      }
+      const normalized = (score - scoreStats.min) / scoreStats.range;
+      if (index < 5) {
+        const hue = 120 - index * 15;
+        return `hsl(${hue}, 70%, 85%)`;
+      }
+      const hue = 60 - normalized * 60;
+      return `hsl(${hue}, 60%, 90%)`;
+    },
+    [isModelRanking, scoreStats]
+  );
+
+  const getScoreBarWidth = useCallback(
+    (score: number) => {
+      if (!isModelRanking) {
+        return 100;
+      }
+      const normalized = (score - scoreStats.min) / scoreStats.range;
+      return Math.max(20, normalized * 100);
+    },
+    [isModelRanking, scoreStats]
+  );
+
+  const handleExplainClick = (apartmentId: string) => {
+    if (selectedForExplain === apartmentId) {
+      setSelectedForExplain(null);
+      return;
+    }
+    setSelectedForExplain(apartmentId);
+    setShowExplainability(true);
+  };
+
+  const getTopContributions = (limit: number = 10) => {
+    if (!explainData || !explainData.contributions?.length) {
+      return [];
+    }
+    const contribution = explainData.contributions[0];
+    const features = explainData.coefficients.feature_names;
+    return contribution.contributions
+      .map((value, index) => ({ feature: features[index], value }))
+      .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+      .slice(0, limit);
+  };
+
+  const selectedRow = selectedForExplain
+    ? rankingRows.find((row) => String(row.apartment.id) === selectedForExplain)
+    : null;
+  const selectedApartment = selectedRow?.apartment ?? null;
+  const explainPredictedScore = explainData?.contributions?.[0]?.predicted_score;
+  const selectedScore = selectedRow?.similarityScore ?? explainPredictedScore ?? null;
+
+  const formatMetricValue = (row: DisplayRow, apartment: Apartment) => {
+    if (isModelRanking) {
+      return row.similarityScore !== undefined ? row.similarityScore.toFixed(3) : '—';
+    }
+    if (!rankingOption.formatMetric) {
+      return row.metricValue !== null && row.metricValue !== undefined ? String(row.metricValue) : '—';
+    }
+    return rankingOption.formatMetric(row.metricValue ?? null, apartment);
+  };
+
+  if (isModelRanking && isRecommendationsLoading && !isInitialSampleLoading) {
     return (
       <div className="recommended-list-view">
         <LoadingSpinner message="Loading recommendations..." />
@@ -231,7 +514,15 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
     );
   }
 
-  if (isError && !initialSampleData) {
+  if (!isModelRanking && isApartmentsLoading && rankingRows.length === 0) {
+    return (
+      <div className="recommended-list-view">
+        <LoadingSpinner message="Loading apartments..." />
+      </div>
+    );
+  }
+
+  if (isModelRanking && isRecommendationsError && !initialSampleData) {
     return (
       <div className="recommended-list-view">
         <ErrorMessage message="Failed to load recommendations" onRetry={() => refetch()} />
@@ -239,92 +530,43 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
     );
   }
 
-  if (!displayRecommendations || displayRecommendations.length === 0) {
+  if (!isModelRanking && isApartmentsError) {
     return (
       <div className="recommended-list-view">
-        <div className="empty-state">
-          <p>No recommendations yet. Please rate some apartments to get started!</p>
-          {isInitialSampleError && (
-            <p>Initial sample unavailable. Please try refreshing.</p>
-          )}
-        </div>
+        <ErrorMessage message="Unable to load apartments for the selected ranking." onRetry={() => setSelectedRankingId('model')} />
       </div>
     );
   }
 
-  const model_trained = recommendationsData?.model_trained ?? false;
-  const recommendations = filteredRecommendations;
-
-  // Calculate min/max scores for gradient visualization
-  const scores = recommendations.map(r => r.predicted_score);
-  const minScore = Math.min(...scores);
-  const maxScore = Math.max(...scores);
-  const scoreRange = maxScore - minScore || 1; // Avoid division by zero
-
-  const getScoreGradient = (score: number, index: number) => {
-    // Normalize score to 0-1 range
-    const normalized = (score - minScore) / scoreRange;
-    
-    // Top 5 get special treatment with distinct colors
-    if (index < 5) {
-      // Gradient from green (high) to yellow (medium-high)
-      const hue = 120 - (index * 15); // 120=green, 90=yellow-green, 60=yellow
-      return `hsl(${hue}, 70%, 85%)`;
+  if (rankingRows.length === 0) {
+    if (isModelRanking && (isRecommendationsLoading || isInitialSampleLoading)) {
+      return (
+        <div className="recommended-list-view">
+          <LoadingSpinner message="Preparing apartments..." />
+        </div>
+      );
     }
-    
-    // Rest get gradient from yellow to red
-    const hue = 60 - (normalized * 60); // 60=yellow, 0=red
-    return `hsl(${hue}, 60%, 90%)`;
-  };
-
-  const getScoreBarWidth = (score: number) => {
-    const normalized = (score - minScore) / scoreRange;
-    return Math.max(20, normalized * 100); // Minimum 20% for visibility
-  };
-
-  const handleExplainClick = (aptId: string) => {
-    // Toggle: if clicking the same apartment, deselect it (keep panel open but show prompt)
-    if (selectedForExplain === aptId) {
-      setSelectedForExplain(null);
-    } else {
-      setSelectedForExplain(aptId);
-      setShowExplainability(true);
-    }
-  };
-
-  // Get top feature contributions for visualization
-  const getTopContributions = (limit: number = 10) => {
-    if (!explainData || !explainData.contributions || explainData.contributions.length === 0) {
-      return [];
-    }
-
-    const contrib = explainData.contributions[0];
-    const features = explainData.coefficients.feature_names;
-    const contributions = contrib.contributions;
-
-    return contributions
-      .map((value: number, index: number) => ({ feature: features[index], value }))
-      .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
-      .slice(0, limit);
-  };
-
-  const selectedRecommendation = selectedForExplain 
-    ? recommendations.find(r => String(r.apartment.id) === selectedForExplain)
-    : null;
-  const selectedApartment = selectedRecommendation?.apartment || null;
-  const selectedScore = selectedRecommendation?.predicted_score || 0;
+    return (
+      <div className="recommended-list-view">
+        <div className="empty-state">
+          <p>No apartments match the current filters. Try adjusting the filters or your ranking selection.</p>
+          {isModelRanking && isInitialSampleError && <p>Initial sample unavailable. Please try refreshing.</p>}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="recommended-list-view">
       <div className="list-header">
         <div className="header-top">
           <h2>Recommended Apartments</h2>
-          {model_trained && ratingsCount >= 5 && (
-            <button 
+          {modelTrained && ratingsCount >= 5 && (
+            <button
               className="toggle-explain-button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowExplainability(!showExplainability);
+              onClick={(event) => {
+                event.stopPropagation();
+                setShowExplainability((visible) => !visible);
               }}
               title={showExplainability ? 'Hide explainability panel' : 'Show explainability panel'}
             >
@@ -333,18 +575,11 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
           )}
         </div>
 
-        {/* Tab Navigation */}
         <div className="tab-navigation">
-          <button
-            className={`tab-button ${activeTab === 'all' ? 'active' : ''}`}
-            onClick={() => setActiveTab('all')}
-          >
-            📋 All Listings <span className="tab-count">({displayRecommendations.length})</span>
+          <button className={`tab-button ${activeTab === 'all' ? 'active' : ''}`} onClick={() => setActiveTab('all')}>
+            📋 All Listings <span className="tab-count">({totalCount})</span>
           </button>
-          <button
-            className={`tab-button ${activeTab === 'rated' ? 'active' : ''}`}
-            onClick={() => setActiveTab('rated')}
-          >
+          <button className={`tab-button ${activeTab === 'rated' ? 'active' : ''}`} onClick={() => setActiveTab('rated')}>
             ⭐ My Ratings <span className="tab-count">({ratedCount})</span>
           </button>
           <button
@@ -355,12 +590,29 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
           </button>
         </div>
 
-        {!model_trained && (
+        <div className="ranking-controls">
+          <label htmlFor="ranking-select">Ranking mode</label>
+          <select
+            id="ranking-select"
+            className="ranking-select"
+            value={selectedRankingId}
+            onChange={(event) => setSelectedRankingId(event.target.value as RankingOptionId)}
+          >
+            {RANKING_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          {rankingOption.description && <span className="ranking-description">{rankingOption.description}</span>}
+        </div>
+
+        {!modelTrained && (
           <div className="calibration-notice">
             ⚠️ Model not yet trained. Rate {Math.max(0, 5 - ratingsCount)} more apartment{ratingsCount < 4 ? 's' : ''} for personalized recommendations.
           </div>
         )}
-        {model_trained && ratingsCount >= 5 && (
+        {modelTrained && ratingsCount >= 5 && (
           <div className="success-notice">
             ✅ Model trained! Showing personalized recommendations based on your preferences.
           </div>
@@ -369,173 +621,167 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
 
       <div className={`content-container ${showExplainability ? 'with-panel' : 'full-width'}`}>
         <div className="list-container" ref={scrollContainerRef}>
-        <table className="apartments-table">
-          <thead>
-            <tr>
-              <th className="col-select">Select</th>
-              <th className="col-rank">Rank</th>
-              <th className="col-name">Name</th>
-              <th className="col-price">Price</th>
-              <th className="col-distance">Distance</th>
-              <th className="col-property-type">Property</th>
-              <th className="col-room-type">Room Type</th>
-              <th className="col-accommodates">Accom.</th>
-              <th className="col-bedrooms">Beds/Bedrooms</th>
-              <th className="col-reviews">Reviews</th>
-              <th className="col-score">Score</th>
-              <th className="col-rating">Your Rating</th>
-              <th className="col-actions">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {recommendations.map((rec: Recommendation, index: number) => {
-              const { apartment, predicted_score } = rec;
-              const aptId = String(apartment.id);
-              const isSelected = selectedApartmentIds.includes(aptId);
-              const isBrushed = brushedApartmentIds.includes(aptId);
-              const isTop = isTopRecommendation(aptId, topRecommendationIds);
-              const color = getColorForApartment(aptId, topRecommendationIds);
+          <table className="apartments-table">
+            <thead>
+              <tr>
+                <th className="col-select">Select</th>
+                <th className="col-rank">Rank</th>
+                <th className="col-name">Name</th>
+                <th className="col-price">Price</th>
+                <th className="col-distance">Distance</th>
+                <th className="col-property-type">Property</th>
+                <th className="col-room-type">Room Type</th>
+                <th className="col-accommodates">Accom.</th>
+                <th className="col-bedrooms">Beds/Bedrooms</th>
+                <th className="col-reviews">Reviews</th>
+                <th className="col-score">{rankingOption.scoreLabel}</th>
+                <th className="col-rating">Your Rating</th>
+                <th className="col-actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleRows.map((row, index) => {
+                const { apartment } = row;
+                const apartmentId = String(apartment.id);
+                const isSelected = selectedApartmentIds.includes(apartmentId);
+                const isBrushed = brushedApartmentIds.includes(apartmentId);
+                const isTop = isTopRecommendation(apartmentId, topRecommendationIds);
+                const color = getColorForApartment(apartmentId, topRecommendationIds);
+                const globalIndex = rankLookup.get(apartmentId) ?? index;
 
-              return (
-                <tr
-                  key={apartment.id}
-                  className={`apartment-row ${isSelected ? 'selected' : ''} ${isBrushed ? 'brushed' : ''}`}
-                  style={{
-                    borderLeft: isTop ? `4px solid ${color}` : undefined,
-                  }}
-                >
-                  <td className="col-select">
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleApartmentSelection(aptId)}
-                      aria-label={`Select ${apartment.name}`}
-                    />
-                  </td>
-                  <td className="col-rank">
-                    <span 
-                      className="rank-badge" 
-                      style={{ 
-                        backgroundColor: isTop ? color : (model_trained ? getScoreGradient(predicted_score, index) : '#e5e7eb'),
-                        border: isTop ? `2px solid ${color}` : 'none',
-                        fontWeight: isTop ? 'bold' : 'normal'
-                      }}
-                    >
-                      #{index + 1}
-                    </span>
-                  </td>
-                  <td className="col-name">
-                    <button
-                      className="apartment-name-button"
-                      onClick={() => openDetailDrawer(aptId)}
-                    >
-                      {apartment.name}
-                    </button>
-                  </td>
-                  <td className="col-price">{formatPrice(apartment.price)}</td>
-                  <td className="col-distance">{formatDistance((apartment.distance_from_city_center || apartment.distance_from_center || 0))}</td>
-                  <td className="col-property-type">{apartment.property_type}</td>
-                  <td className="col-room-type">{formatRoomType(apartment.room_type)}</td>
-                  <td className="col-accommodates">{apartment.accommodates}</td>
-                  <td className="col-bedrooms">{apartment.beds}/{apartment.bedrooms}</td>
-                  <td className="col-reviews">{apartment.number_of_reviews !== undefined ? formatNumber(apartment.number_of_reviews) : '—'}</td>
-                  <td className="col-score">
-                    <div className="score-container">
-                      <div 
-                        className="score-bar-background"
+                return (
+                  <tr
+                    key={apartmentId}
+                    className={`apartment-row ${isSelected ? 'selected' : ''} ${isBrushed ? 'brushed' : ''}`}
+                    style={{ borderLeft: isTop ? `4px solid ${color}` : undefined }}
+                  >
+                    <td className="col-select">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleApartmentSelection(apartmentId)}
+                        aria-label={`Select ${apartment.name}`}
+                      />
+                    </td>
+                    <td className="col-rank">
+                      <span
+                        className="rank-badge"
                         style={{
-                          background: model_trained 
-                            ? `linear-gradient(90deg, ${getScoreGradient(predicted_score, index)} ${getScoreBarWidth(predicted_score)}%, #f0f0f0 ${getScoreBarWidth(predicted_score)}%)`
-                            : '#f9fafb'
+                          backgroundColor: isTop ? color : getScoreGradient(row.similarityScore ?? 0, globalIndex),
+                          border: isTop ? `2px solid ${color}` : 'none',
+                          fontWeight: isTop ? 'bold' : 'normal',
                         }}
                       >
-                        <span className="score-value">{predicted_score.toFixed(3)}</span>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="col-rating">
-                    <RatingControl
-                      apartmentId={aptId}
-                      currentRating={currentRatings[aptId]}
-                      onRate={(rating) => onRate(aptId, rating)}
-                      onRemove={() => onRemoveRating(aptId)}
-                      size="small"
-                    />
-                  </td>
-                  <td className="col-actions">
-                    <div className="action-buttons">
-                      <button
-                        className={`bookmark-button ${bookmarkedApartmentIds.includes(aptId) ? 'bookmarked' : ''}`}
-                        onClick={() => toggleBookmark(aptId)}
-                        title={bookmarkedApartmentIds.includes(aptId) ? 'Remove bookmark' : 'Bookmark apartment'}
-                      >
-                        {bookmarkedApartmentIds.includes(aptId) ? '🔖' : '📌'}
+                        #{globalIndex + 1}
+                      </span>
+                    </td>
+                    <td className="col-name">
+                      <button className="apartment-name-button" onClick={() => openDetailDrawer(apartmentId)}>
+                        {apartment.name}
                       </button>
-                      <button
-                        className="view-details-button"
-                        onClick={() => openDetailDrawer(aptId)}
-                        title="View full details"
-                      >
-                        📄
-                      </button>
-                      {model_trained && (
-                        <button
-                          className={`explain-button ${selectedForExplain === aptId ? 'active' : ''}`}
-                          onClick={() => handleExplainClick(aptId)}
-                          title="Explain why recommended"
-                        >
-                          💡
-                        </button>
+                    </td>
+                    <td className="col-price">{formatPrice(apartment.price)}</td>
+                    <td className="col-distance">
+                      {formatDistance(apartment.distance_from_city_center ?? apartment.distance_from_center ?? 0)}
+                    </td>
+                    <td className="col-property-type">{apartment.property_type}</td>
+                    <td className="col-room-type">{formatRoomType(apartment.room_type)}</td>
+                    <td className="col-accommodates">{apartment.accommodates}</td>
+                    <td className="col-bedrooms">
+                      {apartment.beds}/{apartment.bedrooms}
+                    </td>
+                    <td className="col-reviews">
+                      {apartment.number_of_reviews !== undefined ? formatNumber(apartment.number_of_reviews) : '—'}
+                    </td>
+                    <td className={`col-score ${isModelRanking ? '' : 'attribute-score'}`}>
+                      {isModelRanking ? (
+                        <div className="score-container">
+                          <div
+                            className="score-bar-background"
+                            style={{
+                              background: `linear-gradient(90deg, ${getScoreGradient(
+                                row.similarityScore ?? 0,
+                                globalIndex
+                              )} ${getScoreBarWidth(row.similarityScore ?? 0)}%, #f0f0f0 ${getScoreBarWidth(
+                                row.similarityScore ?? 0
+                              )}%)`,
+                            }}
+                          >
+                            <span className="score-value">
+                              {row.similarityScore !== undefined ? row.similarityScore.toFixed(3) : '—'}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="attribute-score-value">{formatMetricValue(row, apartment)}</span>
                       )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                    </td>
+                    <td className="col-rating">
+                      <RatingControl
+                        apartmentId={apartmentId}
+                        currentRating={currentRatings[apartmentId]}
+                        onRate={(rating) => onRate(apartmentId, rating)}
+                        onRemove={() => onRemoveRating(apartmentId)}
+                        size="small"
+                      />
+                    </td>
+                    <td className="col-actions">
+                      <div className="action-buttons">
+                        <button
+                          className={`bookmark-button ${bookmarkedApartmentIds.includes(apartmentId) ? 'bookmarked' : ''}`}
+                          onClick={() => toggleBookmark(apartmentId)}
+                          title={
+                            bookmarkedApartmentIds.includes(apartmentId)
+                              ? 'Remove bookmark'
+                              : 'Bookmark apartment'
+                          }
+                        >
+                          {bookmarkedApartmentIds.includes(apartmentId) ? '🔖' : '📌'}
+                        </button>
+                        <button
+                          className="view-details-button"
+                          onClick={() => openDetailDrawer(apartmentId)}
+                          title="View full details"
+                        >
+                          📄
+                        </button>
+                        {modelTrained && (
+                          <button
+                            className={`explain-button ${selectedForExplain === apartmentId ? 'active' : ''}`}
+                            onClick={() => handleExplainClick(apartmentId)}
+                            title="Explain why recommended"
+                          >
+                            💡
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
 
-        {/* Infinite scroll trigger and load more indicator */}
-        <div 
-          ref={loadMoreRef} 
-          className="load-more-trigger"
-          style={{ 
-            height: '20px', 
-            margin: '20px 0',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center'
-          }}
-        >
-          {isLoadingMore && (
-            <div className="loading-more-indicator">
-              <span>Loading more apartments...</span>
+          <div ref={loadMoreRef} className="load-more-trigger">
+            {isLoadingMore && <span className="loading-more-indicator">Loading more apartments…</span>}
+          </div>
+
+          {visibleRows.length === 0 && (
+            <div className="empty-tab-state">
+              {activeTab === 'rated' && <p>📝 You have not rated any apartments yet.</p>}
+              {activeTab === 'bookmarked' && <p>🔖 Bookmark apartments to track them here.</p>}
             </div>
           )}
         </div>
 
-        {/* Empty state for filtered views */}
-        {recommendations.length === 0 && (
-          <div className="empty-tab-state">
-            {activeTab === 'rated' && (
-              <p>📝 You haven't rated any apartments yet. Rate apartments to see them here!</p>
-            )}
-            {activeTab === 'bookmarked' && (
-              <p>🔖 No bookmarked apartments. Click the bookmark button (📌) to save apartments for later!</p>
-            )}
-          </div>
-        )}
-        </div>
-
-        {/* Explainability Side Panel */}
-        {showExplainability && model_trained && (
+        {showExplainability && modelTrained && (
           <div className="explainability-panel">
             <div className="panel-header">
               <h3>Why This Recommendation?</h3>
-              <button 
+              <button
                 className="close-panel-button"
-                onClick={(e) => {
-                  e.stopPropagation();
+                onClick={(event) => {
+                  event.stopPropagation();
                   setShowExplainability(false);
                 }}
                 title="Close explainability panel"
@@ -553,11 +799,11 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
                     <span>•</span>
                     <span>{selectedApartment.beds} bed(s)</span>
                     <span>•</span>
-                    <span>{formatDistance(selectedApartment.distance_from_city_center || 0)}</span>
+                    <span>{formatDistance(selectedApartment.distance_from_city_center ?? 0)}</span>
                   </div>
                   <div className="similarity-score">
                     <strong>Similarity Score:</strong>{' '}
-                    {selectedScore.toFixed(3)}
+                    {selectedScore !== null ? selectedScore.toFixed(3) : '—'}
                   </div>
                 </div>
 
@@ -571,21 +817,21 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
                     </p>
                     <div className="contributions-list">
                       {getTopContributions(12).map((item, idx) => {
-                        const isPositive = item.value > 0;
-                        const barWidth = Math.min(Math.abs(item.value) * 100, 100);
-                        
+                        const positive = item.value > 0;
+                        const width = Math.min(Math.abs(item.value) * 100, 100);
                         return (
-                          <div key={idx} className="contribution-item">
+                          <div key={`${item.feature}-${idx}`} className="contribution-item">
                             <div className="contribution-label">
                               <span className="feature-name">{item.feature}</span>
-                              <span className={`contribution-value ${isPositive ? 'positive' : 'negative'}`}>
-                                {isPositive ? '+' : ''}{item.value.toFixed(4)}
+                              <span className={`contribution-value ${positive ? 'positive' : 'negative'}`}>
+                                {positive ? '+' : ''}
+                                {item.value.toFixed(4)}
                               </span>
                             </div>
                             <div className="contribution-bar-container">
-                              <div 
-                                className={`contribution-bar ${isPositive ? 'positive' : 'negative'}`}
-                                style={{ width: `${barWidth}%` }}
+                              <div
+                                className={`contribution-bar ${positive ? 'positive' : 'negative'}`}
+                                style={{ width: `${width}%` }}
                               />
                             </div>
                           </div>

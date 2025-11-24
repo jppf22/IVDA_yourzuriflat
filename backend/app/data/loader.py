@@ -1,5 +1,5 @@
 import os
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 import numpy as np
 import pandas as pd
@@ -179,8 +179,33 @@ class DataStore:
                 df = df[df[colg].isin(filters['neighbourhood_groups'])]
         return df
 
-    def list_apartments(self, offset=0, limit=50, filters: dict = None):
+    def sort_df(self, df: pd.DataFrame, sort_by: Optional[str], sort_order: Optional[str]) -> pd.DataFrame:
+        if not sort_by:
+            return df
+        ascending = True if (sort_order or 'asc').lower() == 'asc' else False
+        sort_column = sort_by
+        # Provide alias fallbacks for commonly requested fields
+        alias_map = {
+            'distance_from_city_center': 'distance_from_city_center',
+            'distance_from_center': 'distance_from_center',
+        }
+        if sort_column not in df.columns:
+            if sort_column == 'distance_from_city_center' and 'distance_from_center' in df.columns:
+                sort_column = 'distance_from_center'
+            elif sort_column == 'distance_from_center' and 'distance_from_city_center' in df.columns:
+                sort_column = 'distance_from_city_center'
+            else:
+                sort_column = alias_map.get(sort_column, sort_column)
+        if sort_column not in df.columns:
+            return df
+        try:
+            return df.sort_values(by=sort_column, ascending=ascending, na_position='last', kind='mergesort')
+        except Exception:
+            return df
+
+    def list_apartments(self, offset=0, limit=50, filters: dict = None, sort_by: Optional[str] = None, sort_order: Optional[str] = None):
         df = self.filter_df(filters)
+        df = self.sort_df(df, sort_by, sort_order)
         total = len(df)
         page = df.iloc[offset : offset + limit]
         # Convert to records and ensure IDs are strings

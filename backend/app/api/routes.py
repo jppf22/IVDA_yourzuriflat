@@ -94,6 +94,8 @@ def get_apartments(
     neighbourhood_groups: Optional[List[str]] = Query(None),
     page: int = 1,
     limit: int = 50,
+    sort_by: Optional[str] = Query(None),
+    sort_order: Optional[str] = Query('asc'),
 ):
     filters = {}
     # Numeric ranges
@@ -160,11 +162,12 @@ def get_apartments(
     if final_ids is not None:
         filters_local = dict(filters)
         df = DATASTORE.filter_df(filters_local, apartment_ids=final_ids)
+        df = DATASTORE.sort_df(df, sort_by, sort_order)
         total = len(df)
         page_df = df.iloc[offset: offset + limit]
         items = page_df.to_dict(orient="records")
     else:
-        items, total = DATASTORE.list_apartments(offset=offset, limit=limit, filters=filters)
+        items, total = DATASTORE.list_apartments(offset=offset, limit=limit, filters=filters, sort_by=sort_by, sort_order=sort_order)
     payload = {"apartments": items, "total": total, "page": page, "limit": limit}
     encoded = jsonable_encoder(payload)
     return JSONResponse(content=_sanitize_for_json(encoded))
