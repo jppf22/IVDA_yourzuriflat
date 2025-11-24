@@ -13,6 +13,7 @@ import type {
   RatingRequest,
   RatingResponse,
   RecommendationsResponse,
+  RecommendationsSubsetResponse,
   PCAResponse,
   ExplainabilityResponse,
   ClustersResponse,
@@ -27,6 +28,7 @@ export const queryKeys = {
   apartments: (params?: ApartmentsQueryParams) => ['apartments', params] as const,
   apartmentDetail: (id: string) => ['apartment', id] as const,
   recommendations: (sessionId: string, limit: number, filterSig: string) => ['recommendations', sessionId, limit, filterSig] as const,
+  recommendationsSubset: (sessionId: string, apartmentIds: string[]) => ['recommendationsSubset', sessionId, apartmentIds.join(',')] as const,
   pca: (attributes?: string[], mode?: 'pca' | 'raw', outliers?: boolean, filterSig?: string) => ['pca', attributes, mode, outliers, filterSig] as const,
   explainability: (sessionId: string, apartmentIds?: string[]) => ['explainability', sessionId, apartmentIds] as const,
   clusters: (filterSig: string) => ['clusters', filterSig] as const,
@@ -155,6 +157,21 @@ export const useRecommendations = (sessionId: string, limit: number = 20, rating
     enabled: !!sessionId,
     staleTime: 30000, // 30 seconds - prevents unnecessary refetches while scrolling
     refetchOnMount: false, // Don't refetch on mount to preserve scroll position
+  });
+};
+
+// Recommendations within a brushed subset
+export const useRecommendationsSubset = (sessionId: string, apartmentIds: string[], ratingsCount?: number) => {
+  const isModelTrained = ratingsCount !== undefined && ratingsCount >= 5;
+  
+  return useQuery<RecommendationsSubsetResponse>({
+    queryKey: queryKeys.recommendationsSubset(sessionId, apartmentIds),
+    queryFn: () => apiClient.get<RecommendationsSubsetResponse>('/recommendations/subset', {
+      session_id: sessionId,
+      apartment_ids: apartmentIds,
+    }),
+    enabled: !!sessionId && apartmentIds.length > 0 && isModelTrained,
+    staleTime: 30000, // 30 seconds
   });
 };
 

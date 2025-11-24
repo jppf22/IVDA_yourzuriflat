@@ -6,7 +6,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import Plot from 'react-plotly.js';
 import { useAppStore } from '../store/useAppStore';
-import { usePCA, useApartments } from '../api/hooks';
+import { usePCA, useApartments, useRecommendationsSubset } from '../api/hooks';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorMessage } from '../components/ErrorMessage';
 import { getColorForApartment, OPACITY } from '../utils/colors';
@@ -134,11 +134,21 @@ export const PCAScatterView = () => {
     brushedApartmentIds,
     setBrushedApartmentIds,
     openDetailDrawer,
+    sessionId,
+    ratingsCount,
     // filters (unused here; useApartments derives from store internally)
   } = useAppStore();
   const attributes = pcaAttributes.length
     ? pcaAttributes
     : ['price', 'distance_from_city_center'];
+
+  // Check recommendations within brushed selection
+  const { data: subsetRecommendations } = useRecommendationsSubset(
+    sessionId,
+    brushedApartmentIds,
+    ratingsCount
+  );
+  const isModelTrained = ratingsCount >= 5;
 
   // Dynamic candidate list derived from first recommendation
   const dynamicCandidates = useMemo(() => {
@@ -408,6 +418,12 @@ export const PCAScatterView = () => {
               Filter Outliers
             </label>
           </div>
+          {brushedApartmentIds.length > 0 && isModelTrained && subsetRecommendations && subsetRecommendations.total_in_subset > 0 && (
+            <div className="recommendations-badge" title={`${subsetRecommendations.total_in_subset} top recommendations in selected area`}>
+              <span className="badge-icon">⭐</span>
+              <span className="badge-text">{subsetRecommendations.total_in_subset} recommended</span>
+            </div>
+          )}
           <button
             type="button"
             className="reset-selection-btn"

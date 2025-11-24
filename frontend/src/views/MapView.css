@@ -490,3 +490,36 @@
   font-size: 0.75rem;
   padding: 0.35rem 0.5rem;
 }
+
+/* Recommendations badge */
+.recommendations-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.8rem;
+  background: linear-gradient(135deg, #fef3c7 0%, #fcd34d 100%);
+  border: 1px solid #f59e0b;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #92400e;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  white-space: nowrap;
+}
+
+.recommendations-badge .badge-icon {
+  font-size: 1rem;
+}
+
+.recommendations-badge .badge-text {
+  white-space: nowrap;
+}
+
+.map-view:not(.map-expanded) .recommendations-badge {
+  font-size: 0.75rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.map-view:not(.map-expanded) .recommendations-badge .badge-icon {
+  font-size: 0.9rem;
+}

@@ -8,7 +8,7 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Plot from 'react-plotly.js';
 import { useAppStore } from '../store/useAppStore';
-import { useApartments, useClusters, useRecommendations } from '../api/hooks';
+import { useApartments, useClusters, useRecommendations, useRecommendationsSubset } from '../api/hooks';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorMessage } from '../components/ErrorMessage';
 import { getColorForApartment, getClusterColor, OPACITY } from '../utils/colors';
@@ -38,6 +38,14 @@ export const MapView = () => {
   const { data: apartmentsData, isLoading: apartmentsLoading, isError: apartmentsError, refetch: refetchApartments } = useApartments();
   const { data: clustersData, isLoading: clustersLoading, isError: clustersError, refetch: refetchClusters } = useClusters();
   const { data: recommendationsData } = useRecommendations(sessionId, 100, ratingsCount);
+  
+  // Check recommendations within brushed selection
+  const { data: subsetRecommendations } = useRecommendationsSubset(
+    sessionId,
+    brushedApartmentIds,
+    ratingsCount
+  );
+  const isModelTrained = ratingsCount >= 5;
 
   const [zoomLevel, setZoomLevel] = useState(11);
   const [mapCenter, setMapCenter] = useState<{ lat: number; lon: number }>({ lat: 47.3769, lon: 8.5417 });
@@ -58,7 +66,6 @@ export const MapView = () => {
   }, [isMapExpanded]);
 
   const topRecommendationIds = topRecommendations.map((apt) => String(apt.id));
-  const isModelTrained = ratingsCount >= 5;
 
   if (apartmentsLoading || clustersLoading) {
     return (
@@ -310,6 +317,13 @@ export const MapView = () => {
               <span className="reset-icon">🔄</span>
               <span>Clear Selection ({brushedApartmentIds.length})</span>
             </button>
+          )}
+
+          {brushedApartmentIds.length > 0 && isModelTrained && subsetRecommendations && subsetRecommendations.total_in_subset > 0 && (
+            <div className="recommendations-badge" title={`${subsetRecommendations.total_in_subset} top recommendations in selected area`}>
+              <span className="badge-icon">⭐</span>
+              <span className="badge-text">{subsetRecommendations.total_in_subset} recommended</span>
+            </div>
           )}
 
           <button

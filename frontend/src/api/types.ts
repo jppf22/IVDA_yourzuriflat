@@ -84,6 +84,20 @@ export interface RecommendationsResponse {
   model_trained: boolean;
 }
 
+// Recommendations within a subset
+export interface RecommendationInSubset {
+  apartment: Apartment;
+  predicted_score: number;
+  rank: number; // 1-indexed global ranking
+}
+
+export interface RecommendationsSubsetResponse {
+  recommendations_in_subset: RecommendationInSubset[];
+  session_id: string;
+  model_trained: boolean;
+  total_in_subset: number;
+}
+
 // PCA response
 export interface PCAPoint {
   apartment_id: string;

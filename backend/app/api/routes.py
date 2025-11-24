@@ -214,6 +214,52 @@ def get_ratings(session_id: str = Query(...)):
     return JSONResponse(content=_sanitize_for_json(encoded))
 
 
+@router.get("/recommendations/subset")
+def get_recommendations_subset(
+    session_id: str = Query(...),
+    apartment_ids: Optional[List[str]] = Query(None),
+):
+    """
+    Returns which apartments from the provided subset are in the top-N recommendations,
+    with their ranking and scores.
+    """
+    if not apartment_ids:
+        return JSONResponse(content=_sanitize_for_json(jsonable_encoder({"recommendations_in_subset": [], "session_id": session_id})))
+    
+    # Get full recommendation scores
+    scores = SESSION_MODEL.predict_scores(session_id)
+    if scores is None:
+        return JSONResponse(content=_sanitize_for_json(jsonable_encoder({"recommendations_in_subset": [], "session_id": session_id, "model_trained": False})))
+    
+    # Get top indices globally
+    top_indices = np.argsort(-scores)[:100]  # Consider top 100 recommendations
+    top_apartment_ids = set(str(DATASTORE.df.iloc[idx]['id']) for idx in top_indices)
+    
+    # Filter to only apartments in the provided subset that are also in top recommendations
+    subset_ids_set = set(apartment_ids)
+    intersection = top_apartment_ids & subset_ids_set
+    
+    # Build results with ranking and scores
+    results = []
+    for rank, idx in enumerate(top_indices):
+        apt_id = str(DATASTORE.df.iloc[idx]['id'])
+        if apt_id in intersection:
+            apt_data = DATASTORE.df.iloc[idx].to_dict()
+            results.append({
+                "apartment": _ensure_string_id(apt_data),
+                "predicted_score": float(scores[idx]),
+                "rank": rank + 1  # 1-indexed ranking
+            })
+    
+    payload = {
+        "recommendations_in_subset": results,
+        "session_id": session_id,
+        "model_trained": True,
+        "total_in_subset": len(intersection)
+    }
+    return JSONResponse(content=_sanitize_for_json(jsonable_encoder(payload)))
+
+
 @router.get("/recommendations")
 def get_recommendations(
     session_id: str = Query(...),
