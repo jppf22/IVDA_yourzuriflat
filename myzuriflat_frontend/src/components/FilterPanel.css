@@ -52,6 +52,12 @@
   flex-direction: column;
   gap: 0.5rem;
 }
+.filter-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
 
 .filter-label {
   font-size: 0.9rem;
@@ -130,6 +136,31 @@
 
 .reset-filters-button:hover {
   background: #dc2626;
+}
+.remove-filter-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #999;
+  font-size: 14px;
+  padding: 0 4px;
+  line-height: 1;
+  border-radius: 4px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.remove-filter-btn:hover {
+  color: #d33;
+  background: rgba(0,0,0,0.05);
+}
+
+.add-filter-group select.filter-input {
+  width: 100%;
+}
+
+.add-filter-group {
+  border-top: 1px solid #eee;
+  padding-top: 12px;
 }
 
 .reset-filters-button:active {

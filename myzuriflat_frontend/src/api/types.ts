@@ -135,6 +135,14 @@ export interface InitialSampleResponse {
   sample_size: number;
 }
 
+// Filter options for dynamic categorical selection
+export interface FilterOptionsResponse {
+  room_types: string[];
+  property_types: string[];
+  neighbourhoods: string[];
+  neighbourhood_groups: string[];
+}
+
 // Filters for apartment queries
 export interface ApartmentFilters {
   price_min?: number;
@@ -144,6 +152,27 @@ export interface ApartmentFilters {
   distance_max?: number;
   min_reviews?: number;
   availability_min?: number;
+  // Extended dynamic numeric filters
+  accommodates_min?: number;
+  accommodates_max?: number;
+  bedrooms_min?: number;
+  bedrooms_max?: number;
+  bathrooms_min?: number;
+  bathrooms_max?: number;
+  beds_min?: number;
+  beds_max?: number;
+  minimum_nights_min?: number;
+  minimum_nights_max?: number;
+  maximum_nights_min?: number;
+  maximum_nights_max?: number;
+  distance_from_city_center_max?: number;
+  price_per_person_max?: number; // example engineered filter if needed
+  availability_365_min?: number;
+  number_of_reviews_min?: number;
+  reviews_per_month_min?: number;
+  // Extended categorical filters
+  property_types?: string[];
+  neighbourhood_groups?: string[];
 }
 
 // Query parameters for apartments endpoint

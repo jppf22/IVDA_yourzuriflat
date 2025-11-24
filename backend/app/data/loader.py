@@ -98,15 +98,51 @@ class DataStore:
             return row.iloc[0].to_dict()
         return None
 
-    def list_apartments(self, offset=0, limit=50, filters: dict = None):
+    def filter_df(self, filters: dict | None) -> pd.DataFrame:
+        """Return a filtered DataFrame (no pagination) according to shared filter semantics."""
         df = self.df
-        if filters:
-            if "price_min" in filters:
-                df = df[df["price"] >= filters["price_min"]]
-            if "price_max" in filters:
-                df = df[df["price"] <= filters["price_max"]]
-            if "room_types" in filters and "room_type" in df.columns:
-                df = df[df["room_type"].isin(filters["room_types"]) ]
+        if not filters:
+            return df
+        # Numeric price shortcuts
+        if "price_min" in filters and "price" in df.columns and filters["price_min"] is not None:
+            df = df[df["price"] >= filters["price_min"]]
+        if "price_max" in filters and "price" in df.columns and filters["price_max"] is not None:
+            df = df[df["price"] <= filters["price_max"]]
+        # Generic numeric range filtering based on *_min / *_max suffix
+        for key, value in list(filters.items()):
+            if value is None:
+                continue
+            if key.endswith('_min'):
+                base = key[:-4]
+                if base in df.columns and np.issubdtype(df[base].dtype, np.number):
+                    df = df[df[base] >= value]
+            elif key.endswith('_max'):
+                base = key[:-4]
+                # distance_from_city_center_max handled separately below
+                if base in df.columns and np.issubdtype(df[base].dtype, np.number):
+                    df = df[df[base] <= value]
+        # Special single-sided max for distance_from_city_center_max
+        if 'distance_from_city_center_max' in filters and 'distance_from_city_center' in df.columns:
+            val = filters['distance_from_city_center_max']
+            if val is not None:
+                df = df[df['distance_from_city_center'] <= val]
+        # Categorical multi-select filters
+        if 'room_types' in filters and 'room_type' in df.columns and filters['room_types']:
+            df = df[df['room_type'].isin(filters['room_types'])]
+        if 'property_types' in filters and 'property_type' in df.columns and filters['property_types']:
+            df = df[df['property_type'].isin(filters['property_types'])]
+        if 'neighbourhoods' in filters and filters['neighbourhoods']:
+            col = 'neighbourhood_cleansed' if 'neighbourhood_cleansed' in df.columns else 'neighbourhood'
+            if col in df.columns:
+                df = df[df[col].isin(filters['neighbourhoods'])]
+        if 'neighbourhood_groups' in filters and filters['neighbourhood_groups']:
+            colg = 'neighbourhood_group_cleansed' if 'neighbourhood_group_cleansed' in df.columns else 'neighbourhood_group'
+            if colg in df.columns:
+                df = df[df[colg].isin(filters['neighbourhood_groups'])]
+        return df
+
+    def list_apartments(self, offset=0, limit=50, filters: dict = None):
+        df = self.filter_df(filters)
         total = len(df)
         page = df.iloc[offset : offset + limit]
         return page.to_dict(orient="records"), total

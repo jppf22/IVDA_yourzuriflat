@@ -62,6 +62,11 @@ export interface AppState {
   toggleStarAttribute: (attr: string) => void;
   resetStarAttributes: () => void;
   starAttributesVersion: number; // for future migrations
+
+  // Dynamic filter fields UI
+  activeFilterFields: string[]; // underlying data field names, not *_min/_max suffixes
+  addFilterField: (field: string) => void;
+  removeFilterField: (field: string) => void;
 }
 
 const defaultFilters: ApartmentFilters = {
@@ -174,6 +179,45 @@ export const useAppStore = create<AppState>()(
         'distance_from_city_center',
       ],
     }),
+  // Dynamic filter fields
+  activeFilterFields: ['minimum_nights','accommodates','price','distance_from_city_center'],
+  addFilterField: (field: string) => set((state) => (
+    state.activeFilterFields.includes(field)
+      ? state
+      : { activeFilterFields: [...state.activeFilterFields, field] }
+  )),
+  removeFilterField: (field: string) => set((state) => {
+    // Map base field names to filter keys that should be cleared
+    const numericMap: Record<string, string[]> = {
+      price: ['price_min','price_max'],
+      accommodates: ['accommodates_min','accommodates_max'],
+      minimum_nights: ['minimum_nights_min','minimum_nights_max'],
+      distance_from_city_center: ['distance_from_city_center_max','distance_max'], // legacy + current
+      bedrooms: ['bedrooms_min','bedrooms_max'],
+      bathrooms: ['bathrooms_min','bathrooms_max'],
+      beds: ['beds_min','beds_max'],
+      maximum_nights: ['maximum_nights_min','maximum_nights_max'],
+      availability_365: ['availability_365_min'],
+      number_of_reviews: ['number_of_reviews_min'],
+      reviews_per_month: ['reviews_per_month_min'],
+    };
+    const categoricalMap: Record<string,string[]> = {
+      room_type: ['room_types'],
+      property_type: ['property_types'],
+      neighbourhood_cleansed: ['neighbourhoods'],
+      neighbourhood_group_cleansed: ['neighbourhood_groups'],
+    };
+    const clearKeys = [
+      ...(numericMap[field] || []),
+      ...(categoricalMap[field] || []),
+    ];
+    const newFilters = { ...state.filters } as Record<string, unknown>;
+    clearKeys.forEach(k => { if (k in newFilters) newFilters[k] = undefined; });
+    return {
+      activeFilterFields: state.activeFilterFields.filter(f => f !== field),
+      filters: newFilters as ApartmentFilters,
+    };
+  }),
     }),
     {
       name: 'starChartPrefs',

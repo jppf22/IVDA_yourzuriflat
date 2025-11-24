@@ -50,7 +50,26 @@ class ApiClient {
 
   // Generic GET request
   async get<T>(url: string, params?: Record<string, unknown>): Promise<T> {
-    const response = await this.client.get<T>(url, { params });
+    if (!params || Object.keys(params).length === 0) {
+      const response = await this.client.get<T>(url);
+      return response.data;
+    }
+    // Custom serialization to ensure FastAPI List[str] parameters receive repeated keys without [] suffix.
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value === undefined || value === null || value === '') return;
+      if (Array.isArray(value)) {
+        value.forEach((v) => {
+          if (v !== undefined && v !== null && v !== '') {
+            searchParams.append(key, String(v));
+          }
+        });
+      } else {
+        searchParams.append(key, String(value));
+      }
+    });
+    const fullUrl = `${url}?${searchParams.toString()}`;
+    const response = await this.client.get<T>(fullUrl);
     return response.data;
   }
 

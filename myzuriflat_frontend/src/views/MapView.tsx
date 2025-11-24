@@ -24,7 +24,8 @@ export const MapView = () => {
     openDetailDrawer,
   } = useAppStore();
 
-  const { data: apartmentsData, isLoading: apartmentsLoading, isError: apartmentsError, refetch: refetchApartments } = useApartments(filters);
+  // Use internal derivation of filters; avoid passing raw filter object to preserve mapping logic
+  const { data: apartmentsData, isLoading: apartmentsLoading, isError: apartmentsError, refetch: refetchApartments } = useApartments();
   const { data: clustersData, isLoading: clustersLoading, isError: clustersError, refetch: refetchClusters } = useClusters();
 
   const [zoomLevel, setZoomLevel] = useState(11);

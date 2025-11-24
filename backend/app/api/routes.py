@@ -45,6 +45,13 @@ class ApartmentsResponse(BaseModel):
     limit: int = 50
 
 
+class FilterOptionsResponse(BaseModel):
+    room_types: List[str] = []
+    property_types: List[str] = []
+    neighbourhoods: List[str] = []
+    neighbourhood_groups: List[str] = []
+
+
 class RatingRequest(BaseModel):
     session_id: str
     apartment_id: str  # accept string ids from frontend
@@ -55,17 +62,53 @@ class RatingRequest(BaseModel):
 def get_apartments(
     price_min: Optional[float] = Query(None),
     price_max: Optional[float] = Query(None),
+    accommodates_min: Optional[float] = Query(None),
+    accommodates_max: Optional[float] = Query(None),
+    bedrooms_min: Optional[float] = Query(None),
+    bedrooms_max: Optional[float] = Query(None),
+    bathrooms_min: Optional[float] = Query(None),
+    bathrooms_max: Optional[float] = Query(None),
+    beds_min: Optional[float] = Query(None),
+    beds_max: Optional[float] = Query(None),
+    minimum_nights_min: Optional[float] = Query(None),
+    minimum_nights_max: Optional[float] = Query(None),
+    maximum_nights_min: Optional[float] = Query(None),
+    maximum_nights_max: Optional[float] = Query(None),
+    distance_from_city_center_max: Optional[float] = Query(None),
+    number_of_reviews_min: Optional[float] = Query(None),
+    availability_365_min: Optional[float] = Query(None),
     room_types: Optional[List[str]] = Query(None),
+    property_types: Optional[List[str]] = Query(None),
+    neighbourhoods: Optional[List[str]] = Query(None),
+    neighbourhood_groups: Optional[List[str]] = Query(None),
     page: int = 1,
     limit: int = 50,
 ):
     filters = {}
-    if price_min is not None:
-        filters["price_min"] = price_min
-    if price_max is not None:
-        filters["price_max"] = price_max
+    # Numeric ranges
+    for name, val in [
+        ("price_min", price_min), ("price_max", price_max),
+        ("accommodates_min", accommodates_min), ("accommodates_max", accommodates_max),
+        ("bedrooms_min", bedrooms_min), ("bedrooms_max", bedrooms_max),
+        ("bathrooms_min", bathrooms_min), ("bathrooms_max", bathrooms_max),
+        ("beds_min", beds_min), ("beds_max", beds_max),
+        ("minimum_nights_min", minimum_nights_min), ("minimum_nights_max", minimum_nights_max),
+        ("maximum_nights_min", maximum_nights_min), ("maximum_nights_max", maximum_nights_max),
+        ("distance_from_city_center_max", distance_from_city_center_max),
+        ("number_of_reviews_min", number_of_reviews_min),
+        ("availability_365_min", availability_365_min),
+    ]:
+        if val is not None:
+            filters[name] = val
+    # Categorical lists
     if room_types:
         filters["room_types"] = room_types
+    if property_types:
+        filters["property_types"] = property_types
+    if neighbourhoods:
+        filters["neighbourhoods"] = neighbourhoods
+    if neighbourhood_groups:
+        filters["neighbourhood_groups"] = neighbourhood_groups
     offset = (page - 1) * limit
     items, total = DATASTORE.list_apartments(offset=offset, limit=limit, filters=filters)
     payload = {"apartments": items, "total": total, "page": page, "limit": limit}
@@ -91,18 +134,71 @@ def post_rating(r: RatingRequest):
 
 
 @router.get("/recommendations")
-def get_recommendations(session_id: str = Query(...), limit: int = 50):
+def get_recommendations(
+    session_id: str = Query(...),
+    limit: int = 50,
+    price_min: Optional[float] = Query(None),
+    price_max: Optional[float] = Query(None),
+    accommodates_min: Optional[float] = Query(None),
+    accommodates_max: Optional[float] = Query(None),
+    bedrooms_min: Optional[float] = Query(None),
+    bedrooms_max: Optional[float] = Query(None),
+    bathrooms_min: Optional[float] = Query(None),
+    bathrooms_max: Optional[float] = Query(None),
+    beds_min: Optional[float] = Query(None),
+    beds_max: Optional[float] = Query(None),
+    minimum_nights_min: Optional[float] = Query(None),
+    minimum_nights_max: Optional[float] = Query(None),
+    maximum_nights_min: Optional[float] = Query(None),
+    maximum_nights_max: Optional[float] = Query(None),
+    distance_from_city_center_max: Optional[float] = Query(None),
+    number_of_reviews_min: Optional[float] = Query(None),
+    availability_365_min: Optional[float] = Query(None),
+    room_types: Optional[List[str]] = Query(None),
+    property_types: Optional[List[str]] = Query(None),
+    neighbourhoods: Optional[List[str]] = Query(None),
+    neighbourhood_groups: Optional[List[str]] = Query(None),
+):
+    # Assemble filters dict
+    filters = {}
+    for name, val in [
+        ("price_min", price_min), ("price_max", price_max),
+        ("accommodates_min", accommodates_min), ("accommodates_max", accommodates_max),
+        ("bedrooms_min", bedrooms_min), ("bedrooms_max", bedrooms_max),
+        ("bathrooms_min", bathrooms_min), ("bathrooms_max", bathrooms_max),
+        ("beds_min", beds_min), ("beds_max", beds_max),
+        ("minimum_nights_min", minimum_nights_min), ("minimum_nights_max", minimum_nights_max),
+        ("maximum_nights_min", maximum_nights_min), ("maximum_nights_max", maximum_nights_max),
+        ("distance_from_city_center_max", distance_from_city_center_max),
+        ("number_of_reviews_min", number_of_reviews_min),
+        ("availability_365_min", availability_365_min),
+    ]:
+        if val is not None:
+            filters[name] = val
+    if room_types:
+        filters["room_types"] = room_types
+    if property_types:
+        filters["property_types"] = property_types
+    if neighbourhoods:
+        filters["neighbourhoods"] = neighbourhoods
+    if neighbourhood_groups:
+        filters["neighbourhood_groups"] = neighbourhood_groups
+
+    df_filtered = DATASTORE.filter_df(filters)
+    if df_filtered.shape[0] == 0:
+        payload = {"recommendations": [], "session_id": session_id, "model_trained": False}
+        encoded = jsonable_encoder(payload)
+        return JSONResponse(content=_sanitize_for_json(encoded))
+
     scores = SESSION_MODEL.predict_scores(session_id)
-    df = DATASTORE.df
     if scores is None:
-        # Defensive fallback: attempt to sort by available quality/review signals then price.
-        df_sorted = df.copy()
+        # Fallback ranking within filtered subset
+        df_sorted = df_filtered.copy()
         sort_cols = []
         if "review_scores_rating" in df_sorted.columns:
             sort_cols.append("review_scores_rating")
         elif "number_of_reviews" in df_sorted.columns:
             sort_cols.append("number_of_reviews")
-        # Always include price if present (ascending for cheaper first)
         if "price" in df_sorted.columns:
             sort_cols.append("price")
         if sort_cols:
@@ -115,34 +211,109 @@ def get_recommendations(session_id: str = Query(...), limit: int = 50):
             try:
                 df_sorted = df_sorted.sort_values(by=sort_cols, ascending=ascending)
             except Exception:
-                pass  # keep original order if sorting fails
+                pass
         items = df_sorted.head(limit).to_dict(orient="records")
         def _fallback_score(row: dict):
             return row.get("review_scores_rating") or row.get("number_of_reviews") or 0
         payload = {"recommendations": [{"apartment": it, "predicted_score": _fallback_score(it)} for it in items], "session_id": session_id, "model_trained": False}
         encoded = jsonable_encoder(payload)
         return JSONResponse(content=_sanitize_for_json(encoded))
-    idx = np.argsort(-scores)[:limit]
+
+    # Subset scores to filtered indices
+    filtered_indices = df_filtered.index.to_numpy()
+    try:
+        filtered_scores = scores[filtered_indices]
+    except Exception:
+        # If indexing fails, fall back to full scores order but only including filtered rows
+        filtered_scores = np.array([scores[i] for i in filtered_indices])
+    top_idx_local = np.argsort(-filtered_scores)[:limit]
     recs = []
-    for i in idx:
-        apt = df.iloc[int(i)].to_dict()
-        recs.append({"apartment": apt, "predicted_score": float(scores[int(i)])})
+    for local_i in top_idx_local:
+        global_idx = filtered_indices[local_i]
+        apt = DATASTORE.df.iloc[int(global_idx)].to_dict()
+        recs.append({"apartment": apt, "predicted_score": float(filtered_scores[local_i])})
     payload = {"recommendations": recs, "session_id": session_id, "model_trained": True}
     encoded = jsonable_encoder(payload)
     return JSONResponse(content=_sanitize_for_json(encoded))
 
 
 @router.get("/pca")
-def get_pca(attributes: Optional[str] = Query(None), mode: str = Query("pca"), filter_outliers: bool = Query(False)):
-    X = DATASTORE.X
-    if X.shape[1] == 0:
+def get_pca(
+    attributes: Optional[str] = Query(None),
+    mode: str = Query("pca"),
+    filter_outliers: bool = Query(False),
+    price_min: Optional[float] = Query(None),
+    price_max: Optional[float] = Query(None),
+    accommodates_min: Optional[float] = Query(None),
+    accommodates_max: Optional[float] = Query(None),
+    bedrooms_min: Optional[float] = Query(None),
+    bedrooms_max: Optional[float] = Query(None),
+    bathrooms_min: Optional[float] = Query(None),
+    bathrooms_max: Optional[float] = Query(None),
+    beds_min: Optional[float] = Query(None),
+    beds_max: Optional[float] = Query(None),
+    minimum_nights_min: Optional[float] = Query(None),
+    minimum_nights_max: Optional[float] = Query(None),
+    maximum_nights_min: Optional[float] = Query(None),
+    maximum_nights_max: Optional[float] = Query(None),
+    distance_from_city_center_max: Optional[float] = Query(None),
+    number_of_reviews_min: Optional[float] = Query(None),
+    availability_365_min: Optional[float] = Query(None),
+    room_types: Optional[List[str]] = Query(None),
+    property_types: Optional[List[str]] = Query(None),
+    neighbourhoods: Optional[List[str]] = Query(None),
+    neighbourhood_groups: Optional[List[str]] = Query(None),
+):
+    # Build filters dict (reuse semantics from apartments endpoint)
+    filters = {}
+    for name, val in [
+        ("price_min", price_min), ("price_max", price_max),
+        ("accommodates_min", accommodates_min), ("accommodates_max", accommodates_max),
+        ("bedrooms_min", bedrooms_min), ("bedrooms_max", bedrooms_max),
+        ("bathrooms_min", bathrooms_min), ("bathrooms_max", bathrooms_max),
+        ("beds_min", beds_min), ("beds_max", beds_max),
+        ("minimum_nights_min", minimum_nights_min), ("minimum_nights_max", minimum_nights_max),
+        ("maximum_nights_min", maximum_nights_min), ("maximum_nights_max", maximum_nights_max),
+        ("distance_from_city_center_max", distance_from_city_center_max),
+        ("number_of_reviews_min", number_of_reviews_min),
+        ("availability_365_min", availability_365_min),
+    ]:
+        if val is not None:
+            filters[name] = val
+    if room_types:
+        filters["room_types"] = room_types
+    if property_types:
+        filters["property_types"] = property_types
+    if neighbourhoods:
+        filters["neighbourhoods"] = neighbourhoods
+    if neighbourhood_groups:
+        filters["neighbourhood_groups"] = neighbourhood_groups
+
+    df_filtered = DATASTORE.filter_df(filters)
+    if df_filtered.shape[0] == 0:
         return {"points": [], "x_label": "", "y_label": "", "mode": mode}
+
+    # Transform subset using existing fitted preprocess
+    drop_cols = ['id', 'name', 'host_id', 'host_name']
+    drop_cols = [c for c in drop_cols if c in df_filtered.columns]
+    df_model = df_filtered.drop(columns=drop_cols)
+    try:
+        X_sub = DATASTORE.preprocess.transform(df_model)
+        if hasattr(X_sub, 'toarray'):
+            X_sub = X_sub.toarray()
+    except Exception:
+        # fallback: no features
+        X_sub = np.zeros((df_filtered.shape[0], 0))
+
+    if X_sub.shape[1] == 0:
+        return {"points": [], "x_label": "", "y_label": "", "mode": mode}
+
     pca = PCA(n_components=2)
-    coords = pca.fit_transform(X)
+    coords = pca.fit_transform(X_sub)
     points = []
     for idx, row in enumerate(coords):
-        # keep apartment_id as string to avoid JavaScript numeric precision loss for large ints
-        points.append({"apartment_id": str(DATASTORE.df.iloc[idx]["id"]), "x": float(row[0]), "y": float(row[1]), "apartment": DATASTORE.df.iloc[idx].to_dict()})
+        apt = df_filtered.iloc[idx]
+        points.append({"apartment_id": str(apt["id"]), "x": float(row[0]), "y": float(row[1]), "apartment": apt.to_dict()})
     payload = {"points": points, "x_label": "PC1", "y_label": "PC2", "explained_variance": pca.explained_variance_ratio_.tolist(), "mode": mode}
     encoded = jsonable_encoder(payload)
     return JSONResponse(content=_sanitize_for_json(encoded))
@@ -164,27 +335,90 @@ def get_explainability(session_id: str = Query(...), apartment_ids: Optional[str
 
 
 @router.get("/clusters")
-def get_clusters(n_clusters: int = 5):
-    X = DATASTORE.X
-    if X.shape[1] == 0:
+def get_clusters(
+    n_clusters: int = 5,
+    price_min: Optional[float] = Query(None),
+    price_max: Optional[float] = Query(None),
+    accommodates_min: Optional[float] = Query(None),
+    accommodates_max: Optional[float] = Query(None),
+    bedrooms_min: Optional[float] = Query(None),
+    bedrooms_max: Optional[float] = Query(None),
+    bathrooms_min: Optional[float] = Query(None),
+    bathrooms_max: Optional[float] = Query(None),
+    beds_min: Optional[float] = Query(None),
+    beds_max: Optional[float] = Query(None),
+    minimum_nights_min: Optional[float] = Query(None),
+    minimum_nights_max: Optional[float] = Query(None),
+    maximum_nights_min: Optional[float] = Query(None),
+    maximum_nights_max: Optional[float] = Query(None),
+    distance_from_city_center_max: Optional[float] = Query(None),
+    number_of_reviews_min: Optional[float] = Query(None),
+    availability_365_min: Optional[float] = Query(None),
+    room_types: Optional[List[str]] = Query(None),
+    property_types: Optional[List[str]] = Query(None),
+    neighbourhoods: Optional[List[str]] = Query(None),
+    neighbourhood_groups: Optional[List[str]] = Query(None),
+):
+    filters = {}
+    for name, val in [
+        ("price_min", price_min), ("price_max", price_max),
+        ("accommodates_min", accommodates_min), ("accommodates_max", accommodates_max),
+        ("bedrooms_min", bedrooms_min), ("bedrooms_max", bedrooms_max),
+        ("bathrooms_min", bathrooms_min), ("bathrooms_max", bathrooms_max),
+        ("beds_min", beds_min), ("beds_max", beds_max),
+        ("minimum_nights_min", minimum_nights_min), ("minimum_nights_max", minimum_nights_max),
+        ("maximum_nights_min", maximum_nights_min), ("maximum_nights_max", maximum_nights_max),
+        ("distance_from_city_center_max", distance_from_city_center_max),
+        ("number_of_reviews_min", number_of_reviews_min),
+        ("availability_365_min", availability_365_min),
+    ]:
+        if val is not None:
+            filters[name] = val
+    if room_types:
+        filters["room_types"] = room_types
+    if property_types:
+        filters["property_types"] = property_types
+    if neighbourhoods:
+        filters["neighbourhoods"] = neighbourhoods
+    if neighbourhood_groups:
+        filters["neighbourhood_groups"] = neighbourhood_groups
+
+    df_filtered = DATASTORE.filter_df(filters)
+    if df_filtered.shape[0] == 0:
         return {"clusters": [], "centroids": []}
-    kmeans = KMeans(n_clusters=n_clusters, random_state=0)
-    labels = kmeans.fit_predict(X)
+
+    # Transform features for clustering (use existing preprocessing)
+    drop_cols = ['id', 'name', 'host_id', 'host_name']
+    drop_cols = [c for c in drop_cols if c in df_filtered.columns]
+    df_model = df_filtered.drop(columns=drop_cols)
+    try:
+        X_sub = DATASTORE.preprocess.transform(df_model)
+        if hasattr(X_sub, 'toarray'):
+            X_sub = X_sub.toarray()
+    except Exception:
+        X_sub = np.zeros((df_filtered.shape[0], 0))
+    if X_sub.shape[1] == 0:
+        return {"clusters": [], "centroids": []}
+
+    # Adjust cluster count if filtered rows fewer than requested clusters
+    effective_clusters = min(n_clusters, df_filtered.shape[0])
+    if effective_clusters < 1:
+        return {"clusters": [], "centroids": []}
+    kmeans = KMeans(n_clusters=effective_clusters, random_state=0)
+    labels = kmeans.fit_predict(X_sub)
     clusters = []
     for idx, lab in enumerate(labels):
-        clusters.append({"apartment_id": str(DATASTORE.df.iloc[idx]["id"]), "cluster_id": int(lab), "apartment": DATASTORE.df.iloc[idx].to_dict()})
-    # compute geographic centroids (latitude/longitude) and sizes for map view
+        apt = df_filtered.iloc[idx]
+        clusters.append({"apartment_id": str(apt["id"]), "cluster_id": int(lab), "apartment": apt.to_dict()})
+    # compute geographic centroids and sizes
     centroids = []
-    df = DATASTORE.df
     for cid in range(int(labels.max()) + 1):
         idxs = [i for i, lab in enumerate(labels) if int(lab) == cid]
         if len(idxs) == 0:
             continue
-        lat_col = df.columns[df.columns.str.lower() == 'latitude'][0] if 'latitude' in df.columns else None
-        lon_col = df.columns[df.columns.str.lower() == 'longitude'][0] if 'longitude' in df.columns else None
-        if lat_col and lon_col:
-            lats = df.iloc[idxs]["latitude"].astype(float)
-            lons = df.iloc[idxs]["longitude"].astype(float)
+        if 'latitude' in df_filtered.columns and 'longitude' in df_filtered.columns:
+            lats = df_filtered.iloc[idxs]['latitude'].astype(float)
+            lons = df_filtered.iloc[idxs]['longitude'].astype(float)
             lat_mean = float(lats.mean())
             lon_mean = float(lons.mean())
         else:
@@ -197,23 +431,109 @@ def get_clusters(n_clusters: int = 5):
 
 
 @router.get("/initial-sample")
-def initial_sample(k: int = 5):
-    # farthest-first greedy on feature space
-    X = DATASTORE.X
-    n = X.shape[0]
+def initial_sample(
+    k: int = 5,
+    price_min: Optional[float] = Query(None),
+    price_max: Optional[float] = Query(None),
+    accommodates_min: Optional[float] = Query(None),
+    accommodates_max: Optional[float] = Query(None),
+    bedrooms_min: Optional[float] = Query(None),
+    bedrooms_max: Optional[float] = Query(None),
+    bathrooms_min: Optional[float] = Query(None),
+    bathrooms_max: Optional[float] = Query(None),
+    beds_min: Optional[float] = Query(None),
+    beds_max: Optional[float] = Query(None),
+    minimum_nights_min: Optional[float] = Query(None),
+    minimum_nights_max: Optional[float] = Query(None),
+    maximum_nights_min: Optional[float] = Query(None),
+    maximum_nights_max: Optional[float] = Query(None),
+    distance_from_city_center_max: Optional[float] = Query(None),
+    number_of_reviews_min: Optional[float] = Query(None),
+    availability_365_min: Optional[float] = Query(None),
+    room_types: Optional[List[str]] = Query(None),
+    property_types: Optional[List[str]] = Query(None),
+    neighbourhoods: Optional[List[str]] = Query(None),
+    neighbourhood_groups: Optional[List[str]] = Query(None),
+):
+    # Build filters dict
+    filters = {}
+    for name, val in [
+        ("price_min", price_min), ("price_max", price_max),
+        ("accommodates_min", accommodates_min), ("accommodates_max", accommodates_max),
+        ("bedrooms_min", bedrooms_min), ("bedrooms_max", bedrooms_max),
+        ("bathrooms_min", bathrooms_min), ("bathrooms_max", bathrooms_max),
+        ("beds_min", beds_min), ("beds_max", beds_max),
+        ("minimum_nights_min", minimum_nights_min), ("minimum_nights_max", minimum_nights_max),
+        ("maximum_nights_min", maximum_nights_min), ("maximum_nights_max", maximum_nights_max),
+        ("distance_from_city_center_max", distance_from_city_center_max),
+        ("number_of_reviews_min", number_of_reviews_min),
+        ("availability_365_min", availability_365_min),
+    ]:
+        if val is not None:
+            filters[name] = val
+    if room_types:
+        filters["room_types"] = room_types
+    if property_types:
+        filters["property_types"] = property_types
+    if neighbourhoods:
+        filters["neighbourhoods"] = neighbourhoods
+    if neighbourhood_groups:
+        filters["neighbourhood_groups"] = neighbourhood_groups
+
+    df_filtered = DATASTORE.filter_df(filters)
+    if df_filtered.shape[0] == 0:
+        return {"apartments": [], "sample_size": 0}
+
+    # Transform filtered subset using existing preprocess to obtain feature vectors
+    drop_cols = ['id', 'name', 'host_id', 'host_name']
+    drop_cols = [c for c in drop_cols if c in df_filtered.columns]
+    df_model = df_filtered.drop(columns=drop_cols)
+    try:
+        X_sub = DATASTORE.preprocess.transform(df_model)
+        if hasattr(X_sub, 'toarray'):
+            X_sub = X_sub.toarray()
+    except Exception:
+        X_sub = np.zeros((df_filtered.shape[0], 0))
+
+    n = X_sub.shape[0]
     if n == 0:
         return {"apartments": [], "sample_size": 0}
 
-    start_idx = np.linalg.norm(X, axis=1).argmax()
+    # farthest-first greedy on subset feature space
+    norms = np.linalg.norm(X_sub, axis=1)
+    start_idx = norms.argmax()
     chosen = [start_idx]
-    dists = np.linalg.norm(X - X[start_idx], axis=1)
-
+    dists = np.linalg.norm(X_sub - X_sub[start_idx], axis=1)
     for _ in range(1, min(k, n)):
         idx = int(np.argmax(dists))
         chosen.append(idx)
-        newd = np.linalg.norm(X - X[idx], axis=1)
+        newd = np.linalg.norm(X_sub - X_sub[idx], axis=1)
         dists = np.minimum(dists, newd)
-    items = [DATASTORE.df.iloc[int(i)].to_dict() for i in chosen]
+    items = [df_filtered.iloc[int(i)].to_dict() for i in chosen]
     payload = {"apartments": items, "sample_size": len(items)}
+    encoded = jsonable_encoder(payload)
+    return JSONResponse(content=_sanitize_for_json(encoded))
+
+
+@router.get("/filter-options", response_model=FilterOptionsResponse)
+def filter_options():
+    df = DATASTORE.df
+    def uniq(col: str) -> List[str]:
+        if col not in df.columns:
+            return []
+        vals = df[col].dropna().unique().tolist()
+        # Coerce to str and sort for stable UI
+        return sorted([str(v) for v in vals if str(v).strip()])
+    room_types = uniq('room_type')
+    property_types = uniq('property_type')
+    # Prefer cleansed columns if present
+    neighbourhoods = uniq('neighbourhood_cleansed') or uniq('neighbourhood')
+    neighbourhood_groups = uniq('neighbourhood_group_cleansed') or uniq('neighbourhood_group')
+    payload = {
+        'room_types': room_types,
+        'property_types': property_types,
+        'neighbourhoods': neighbourhoods,
+        'neighbourhood_groups': neighbourhood_groups,
+    }
     encoded = jsonable_encoder(payload)
     return JSONResponse(content=_sanitize_for_json(encoded))
