@@ -38,49 +38,49 @@ export const queryKeys = {
 
 // Apartments list with filters
 export const useApartments = (params?: ApartmentsQueryParams) => {
-  // If params not explicitly passed, derive from store dynamic filters plus brushed selection
   const { filters, brushedApartmentIds, selectedClusterId } = useAppStore();
   const derived: Record<string, unknown> = {};
-  if (!params) {
-    // Map store filters into query parameters only when values exist
-    const pushIf = (key: string, value: unknown) => {
-      if (value !== undefined && value !== null && value !== '') derived[key] = value;
-    };
-    // price
-    pushIf('price_min', filters.price_min);
-    pushIf('price_max', filters.price_max);
-    // generic numeric fields
-    const numericMap: Record<string, { minKey: string; maxKey: string }> = {
-      accommodates: { minKey: 'accommodates_min', maxKey: 'accommodates_max' },
-      bedrooms: { minKey: 'bedrooms_min', maxKey: 'bedrooms_max' },
-      bathrooms: { minKey: 'bathrooms_min', maxKey: 'bathrooms_max' },
-      beds: { minKey: 'beds_min', maxKey: 'beds_max' },
-      minimum_nights: { minKey: 'minimum_nights_min', maxKey: 'minimum_nights_max' },
-      maximum_nights: { minKey: 'maximum_nights_min', maxKey: 'maximum_nights_max' },
-    };
-    Object.values(numericMap).forEach((keys) => {
-      const f = filters as ApartmentFilters;
-      pushIf(keys.minKey, f[keys.minKey as keyof ApartmentFilters]);
-      pushIf(keys.maxKey, f[keys.maxKey as keyof ApartmentFilters]);
-    });
-    const fAny = filters as ApartmentFilters;
-    pushIf('distance_from_city_center_max', fAny.distance_from_city_center_max || filters.distance_max);
-    pushIf('number_of_reviews_min', fAny.number_of_reviews_min);
-    pushIf('availability_365_min', fAny.availability_365_min || filters.availability_min);
-    // categorical
-    pushIf('room_types', filters.room_types);
-    pushIf('property_types', fAny.property_types);
-    pushIf('neighbourhoods', filters.neighbourhoods);
-    pushIf('neighbourhood_groups', fAny.neighbourhood_groups);
-    // Cluster filter
-    if (selectedClusterId !== null) {
-      pushIf('cluster_id', selectedClusterId);
+  const pushIf = (key: string, value: unknown) => {
+    if (value !== undefined && value !== null && value !== '' && !(Array.isArray(value) && value.length === 0)) {
+      derived[key] = value;
     }
-    // Hard subset from brushed selection acts as global filter
-    if (brushedApartmentIds && brushedApartmentIds.length > 0) {
-      derived['apartment_ids'] = brushedApartmentIds;
-    }
+  };
+
+  pushIf('price_min', filters.price_min);
+  pushIf('price_max', filters.price_max);
+
+  const numericMap: Record<string, { minKey: string; maxKey: string }> = {
+    accommodates: { minKey: 'accommodates_min', maxKey: 'accommodates_max' },
+    bedrooms: { minKey: 'bedrooms_min', maxKey: 'bedrooms_max' },
+    bathrooms: { minKey: 'bathrooms_min', maxKey: 'bathrooms_max' },
+    beds: { minKey: 'beds_min', maxKey: 'beds_max' },
+    minimum_nights: { minKey: 'minimum_nights_min', maxKey: 'minimum_nights_max' },
+    maximum_nights: { minKey: 'maximum_nights_min', maxKey: 'maximum_nights_max' },
+  };
+
+  Object.values(numericMap).forEach((keys) => {
+    const f = filters as ApartmentFilters;
+    pushIf(keys.minKey, f[keys.minKey as keyof ApartmentFilters]);
+    pushIf(keys.maxKey, f[keys.maxKey as keyof ApartmentFilters]);
+  });
+
+  const fAny = filters as ApartmentFilters;
+  pushIf('distance_from_city_center_max', fAny.distance_from_city_center_max || filters.distance_max);
+  pushIf('number_of_reviews_min', fAny.number_of_reviews_min);
+  pushIf('availability_365_min', fAny.availability_365_min || filters.availability_min);
+  pushIf('room_types', filters.room_types);
+  pushIf('property_types', fAny.property_types);
+  pushIf('neighbourhoods', filters.neighbourhoods);
+  pushIf('neighbourhood_groups', fAny.neighbourhood_groups);
+
+  if (selectedClusterId !== null) {
+    pushIf('cluster_id', selectedClusterId);
   }
+
+  if (brushedApartmentIds && brushedApartmentIds.length > 0) {
+    derived['apartment_ids'] = brushedApartmentIds;
+  }
+
   const finalParams: ApartmentsQueryParams = {
     ...(derived as ApartmentsQueryParams),
     ...(params || {}),
