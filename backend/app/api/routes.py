@@ -1,11 +1,13 @@
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
 import math
 import numpy as np
+import httpx
+from urllib.parse import urlparse
 
 
 def _sanitize_for_json(obj):
@@ -564,3 +566,42 @@ def filter_options():
     }
     encoded = jsonable_encoder(payload)
     return JSONResponse(content=_sanitize_for_json(encoded))
+
+
+@router.get("/image-proxy")
+async def image_proxy(url: str):
+    """Proxy remote images to avoid client-side tracking/adblock blocks.
+
+    - Validates that the URL is http/https and the host is in an allowlist.
+    - Streams bytes from the upstream server with original content-type when possible.
+    - Adds caching headers to reduce repeated fetches.
+    """
+    if not url:
+        raise HTTPException(status_code=400, detail="Missing url")
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid url")
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(status_code=400, detail="Unsupported URL scheme")
+    host = parsed.netloc.lower()
+    # Allowlist: Airbnb/Muscache image hosts (extend if needed)
+    allowed = (
+        host.endswith(".muscache.com") or host == "muscache.com"
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Host not allowed")
+
+    try:
+        timeout = httpx.Timeout(15.0, connect=5.0)
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            resp = await client.get(url)
+            if resp.status_code != 200 or resp.content is None:
+                raise HTTPException(status_code=resp.status_code, detail="Upstream fetch failed")
+            content_type = resp.headers.get("content-type", "image/jpeg")
+            headers = {"Cache-Control": "public, max-age=604800"}  # 7 days
+            return StreamingResponse(iter([resp.content]), media_type=content_type, headers=headers)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=502, detail="Image proxy error")

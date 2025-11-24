@@ -18,18 +18,42 @@ class DataStore:
     def _preprocess(self):
         df = self.raw.copy()
 
-        # Attach high resolution image URLs from the original export when missing in the cleaned file.
-        if "picture_url" not in df.columns:
-            picture_path = os.path.join(self.base_dir, "data", "listings.csv")
-            if os.path.exists(picture_path):
-                try:
-                    pictures = pd.read_csv(picture_path, usecols=["id", "picture_url"])
-                    pictures["id"] = pictures["id"].astype(str)
+        # Attach/augment image URLs from the original export (listings.csv) and coalesce
+        picture_path = os.path.join(self.base_dir, "data", "listings.csv")
+        if os.path.exists(picture_path):
+            try:
+                pictures = pd.read_csv(picture_path, usecols=["id", "picture_url"])
+                pictures["id"] = pictures["id"].astype(str)
+                # Ensure id in df is string for stable join
+                if "id" in df.columns:
                     df["id"] = df["id"].astype(str)
-                    df = df.merge(pictures, on="id", how="left")
-                except Exception:
+                # Merge with suffix to preserve any existing cleaned picture_url
+                df = df.merge(pictures, on="id", how="left", suffixes=("", "_csv"))
+                # Helper to test for valid-looking URLs
+                def _valid_url(series: pd.Series) -> pd.Series:
+                    s = series.astype(str)
+                    return s.str.startswith(("http://", "https://"), na=False) & s.str.strip().ne("")
+                # Coalesce: prefer existing non-empty picture_url, else CSV value
+                if "picture_url" in df.columns and "picture_url_csv" in df.columns:
+                    existing = df["picture_url"]
+                    from_csv = df["picture_url_csv"]
+                    df["picture_url"] = np.where(_valid_url(existing), existing,
+                                                  np.where(_valid_url(from_csv), from_csv, np.nan))
+                    df.drop(columns=["picture_url_csv"], inplace=True)
+                elif "picture_url_csv" in df.columns:
+                    from_csv = df["picture_url_csv"]
+                    df["picture_url"] = np.where(_valid_url(from_csv), from_csv, np.nan)
+                    df.drop(columns=["picture_url_csv"], inplace=True)
+                elif "picture_url" not in df.columns:
+                    # Neither present after merge; create column
                     df["picture_url"] = np.nan
-            else:
+            except Exception:
+                # On any failure, ensure column exists (frontend expects it)
+                if "picture_url" not in df.columns:
+                    df["picture_url"] = np.nan
+        else:
+            # listings.csv missing; ensure column exists
+            if "picture_url" not in df.columns:
                 df["picture_url"] = np.nan
 
         if "id" in df.columns:

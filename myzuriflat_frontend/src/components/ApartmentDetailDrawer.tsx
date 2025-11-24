@@ -4,7 +4,7 @@
  * Supports T4 (calibration) and detail-on-demand interaction
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { MouseEvent } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { useApartmentDetail } from '../api/hooks';
@@ -34,6 +34,7 @@ export const ApartmentDetailDrawer = ({
 }: ApartmentDetailDrawerProps) => {
   const { detailDrawerOpen, detailApartmentId, closeDetailDrawer } = useAppStore();
   const [imageError, setImageError] = useState(false);
+  const [imgRetry, setImgRetry] = useState(0);
 
   const {
     data: apartment,
@@ -42,9 +43,13 @@ export const ApartmentDetailDrawer = ({
     refetch,
   } = useApartmentDetail(detailApartmentId || '');
 
-  useEffect(() => {
-    setImageError(false);
-  }, [detailApartmentId]);
+  // Helper to append a cache-busting query param to the image URL on retry
+  const backendBase: string = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_BACKEND_URL || 'http://localhost:8000';
+  const proxiedImage = (url: string | undefined | null, retry: number): string | undefined => {
+    if (!url) return undefined;
+    const encoded = encodeURIComponent(url);
+    return `${backendBase}/image-proxy?url=${encoded}&v=${retry}`;
+  };
 
   if (!detailDrawerOpen || !detailApartmentId) {
     return null;
@@ -87,7 +92,8 @@ export const ApartmentDetailDrawer = ({
               {apartment.picture_url && !imageError ? (
                 <div className="apartment-image-wrapper">
                   <img
-                    src={apartment.picture_url}
+                    key={`${detailApartmentId}-${imgRetry}`}
+                    src={proxiedImage(apartment.picture_url, imgRetry)}
                     alt={apartment.name || 'Apartment photo'}
                     loading="lazy"
                     onError={() => setImageError(true)}
@@ -97,6 +103,25 @@ export const ApartmentDetailDrawer = ({
                 <div className="apartment-image-placeholder">
                   <span>📷</span>
                   <p>Image not available</p>
+                  {apartment.picture_url ? (
+                    <button
+                      onClick={() => {
+                        setImageError(false);
+                        setImgRetry((r) => r + 1);
+                      }}
+                      aria-label="Retry loading image"
+                      style={{
+                        marginTop: '0.5rem',
+                        padding: '0.4rem 0.75rem',
+                        borderRadius: 6,
+                        border: '1px solid #d1d5db',
+                        background: '#ffffff',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Retry image
+                    </button>
+                  ) : null}
                 </div>
               )}
 
