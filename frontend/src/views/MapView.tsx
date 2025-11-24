@@ -39,6 +39,7 @@ export const MapView = () => {
   const { data: recommendationsData } = useRecommendations(sessionId, 100, ratingsCount);
 
   const [zoomLevel, setZoomLevel] = useState(11);
+  const [mapCenter, setMapCenter] = useState<{ lat: number; lon: number }>({ lat: 47.3769, lon: 8.5417 });
   const [mapStyle, setMapStyle] = useState<string>('carto-positron'); // Default clean style
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [showClusters, setShowClusters] = useState(true);
@@ -198,7 +199,7 @@ export const MapView = () => {
   const layout: Partial<Layout> = {
     mapbox: {
       style: mapStyle,
-      center: zurichCenter,
+      center: mapCenter,
       zoom: zoomLevel,
     },
     height: isMapExpanded ? Math.max(window.innerHeight - 140, 400) : 300,
@@ -241,11 +242,24 @@ export const MapView = () => {
     if (relayoutData['mapbox.zoom'] !== undefined) {
       setZoomLevel(relayoutData['mapbox.zoom'] as number);
     }
+    if (relayoutData['mapbox.center'] && typeof relayoutData['mapbox.center'] === 'object') {
+      const center = relayoutData['mapbox.center'] as { lat: number; lon: number };
+      setMapCenter(center);
+    }
+    if (
+      relayoutData['mapbox.center.lat'] !== undefined &&
+      relayoutData['mapbox.center.lon'] !== undefined
+    ) {
+      setMapCenter({
+        lat: relayoutData['mapbox.center.lat'] as number,
+        lon: relayoutData['mapbox.center.lon'] as number,
+      });
+    }
   };
 
   const handleRecenter = () => {
     setZoomLevel(11);
-    // Force relayout by updating layout object
+    setMapCenter(zurichCenter);
   };
 
   const mapNode = (
