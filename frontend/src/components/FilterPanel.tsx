@@ -5,7 +5,8 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useAppStore } from '../store/useAppStore';
-import { useFilterOptions } from '../api/hooks';
+import { useFilterOptions, useNumericDistributions } from '../api/hooks';
+import { RangeSlider } from './RangeSlider';
 import './FilterPanel.css';
 
 interface FilterPanelProps {
@@ -16,55 +17,38 @@ export const FilterPanel = ({ collapsed: initialCollapsed = false }: FilterPanel
   const { filters, setFilters, resetFilters, activeFilterFields, addFilterField, removeFilterField } = useAppStore();
   const [collapsed, setCollapsed] = useState(initialCollapsed);
 
-  // Local state for controlled inputs with debouncing
-  // Local numeric input state mapping field-> {min,max}
-  const [numericLocal, setNumericLocal] = useState<Record<string, { min?: string; max?: string }>>({
-    price: { min: filters.price_min?.toString() || '', max: filters.price_max?.toString() || '' },
-    accommodates: { min: (filters as any).accommodates_min?.toString() || '', max: (filters as any).accommodates_max?.toString() || '' },
-    minimum_nights: { min: (filters as any).minimum_nights_min?.toString() || '', max: (filters as any).minimum_nights_max?.toString() || '' },
-    distance_from_city_center: { max: (filters as any).distance_from_city_center_max?.toString() || '' },
-  });
+  const { data: filterOpts } = useFilterOptions();
+  const { data: distributions } = useNumericDistributions();
 
-  // Debounce filter updates
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const upd: Record<string, any> = {};
-      Object.entries(numericLocal).forEach(([field, range]) => {
-        if (range.min) upd[`${field}_min`] = parseFloat(range.min);
-        else upd[`${field}_min`] = undefined;
-        if (range.max) upd[`${field}_max`] = parseFloat(range.max);
-        else upd[`${field}_max`] = undefined;
-      });
-      // Special case distance: only max side
-      if (numericLocal.distance_from_city_center?.max) {
-        upd['distance_from_city_center_max'] = parseFloat(numericLocal.distance_from_city_center.max);
-      } else {
-        upd['distance_from_city_center_max'] = undefined;
-      }
-      setFilters(upd);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [numericLocal, setFilters]);
+  // Local state for range sliders (no debouncing needed, updated on mouse release)
+  const handleRangeChange = (field: string, value: [number, number], singleMax: boolean = false) => {
+    const upd: Record<string, any> = {};
+    if (singleMax) {
+      upd[`${field}_max`] = value[1];
+    } else {
+      upd[`${field}_min`] = value[0];
+      upd[`${field}_max`] = value[1];
+    }
+    setFilters(upd);
+  };
 
   const handleReset = () => {
     resetFilters();
-    setNumericLocal({});
   };
 
-  const numericFieldsMeta: Record<string, { label: string; singleMax?: boolean }> = {
-    price: { label: 'Price (CHF)' },
-    accommodates: { label: 'Accommodates' },
-    minimum_nights: { label: 'Minimum Nights' },
-    distance_from_city_center: { label: 'Distance to Center (km)', singleMax: true },
-    bedrooms: { label: 'Bedrooms' },
-    bathrooms: { label: 'Bathrooms' },
-    beds: { label: 'Beds' },
-    maximum_nights: { label: 'Maximum Nights' },
-    availability_365: { label: 'Availability (days/year)' },
-    number_of_reviews: { label: 'Number of Reviews' },
+  const numericFieldsMeta: Record<string, { label: string; singleMax?: boolean; step?: number }> = {
+    price: { label: 'Price (CHF)', step: 10 },
+    accommodates: { label: 'Accommodates', step: 1 },
+    minimum_nights: { label: 'Minimum Nights', step: 1 },
+    distance_from_city_center: { label: 'Distance to Center (km)', singleMax: true, step: 0.1 },
+    bedrooms: { label: 'Bedrooms', step: 1 },
+    bathrooms: { label: 'Bathrooms', step: 0.5 },
+    beds: { label: 'Beds', step: 1 },
+    maximum_nights: { label: 'Maximum Nights', step: 10 },
+    availability_365: { label: 'Availability (days/year)', step: 10 },
+    number_of_reviews: { label: 'Number of Reviews', step: 10 },
   };
 
-  const { data: filterOpts } = useFilterOptions();
   const categoricalFieldsMeta: Record<string, { label: string; options: string[] }> = {
     room_type: { label: 'Room Type', options: filterOpts?.room_types || [] },
     property_type: { label: 'Property Type', options: filterOpts?.property_types || [] },
@@ -99,7 +83,13 @@ export const FilterPanel = ({ collapsed: initialCollapsed = false }: FilterPanel
           {activeFilterFields.map((field) => {
             if (numericFieldsMeta[field]) {
               const meta = numericFieldsMeta[field];
-              const state = numericLocal[field] || {};
+              const dist = distributions?.[field];
+              
+              if (!dist) return null; // Skip if no distribution data yet
+              
+              const currentMin = (filters as any)[`${field}_min`] ?? dist.min;
+              const currentMax = (filters as any)[`${field}_max`] ?? dist.max;
+              
               return (
                 <div className="filter-group" key={field}>
                   <div className="filter-group-header">
@@ -109,40 +99,24 @@ export const FilterPanel = ({ collapsed: initialCollapsed = false }: FilterPanel
                       className="remove-filter-btn"
                       onClick={() => {
                         removeFilterField(field);
-                        setNumericLocal(prev => {
-                          const copy = { ...prev };
-                          delete copy[field];
-                          return copy;
-                        });
+                        // Clear filter values
+                        setFilters({
+                          [`${field}_min`]: undefined,
+                          [`${field}_max`]: undefined,
+                        } as any);
                       }}
                       aria-label={`Remove filter ${meta.label}`}
                     >✕</button>
                   </div>
-                  <div className="filter-range">
-                    {!meta.singleMax && (
-                      <input
-                        type="number"
-                        className="filter-input"
-                        placeholder="Min"
-                        value={state.min || ''}
-                        onChange={(e) => setNumericLocal((prev) => ({
-                          ...prev,
-                          [field]: { ...prev[field], min: e.target.value },
-                        }))}
-                      />
-                    )}
-                    {!meta.singleMax && <span className="range-separator">—</span>}
-                    <input
-                      type="number"
-                      className="filter-input"
-                      placeholder={meta.singleMax ? 'Max' : 'Max'}
-                      value={state.max || ''}
-                      onChange={(e) => setNumericLocal((prev) => ({
-                        ...prev,
-                        [field]: { ...prev[field], max: e.target.value },
-                      }))}
-                    />
-                  </div>
+                  <RangeSlider
+                    min={dist.min}
+                    max={dist.max}
+                    value={[currentMin, currentMax]}
+                    onChange={(value) => handleRangeChange(field, value, meta.singleMax)}
+                    histogram={dist.histogram}
+                    step={meta.step || 1}
+                    singleMax={meta.singleMax}
+                  />
                 </div>
               );
             }

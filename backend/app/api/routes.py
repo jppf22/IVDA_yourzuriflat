@@ -675,6 +675,55 @@ def filter_options():
     return JSONResponse(content=_sanitize_for_json(encoded))
 
 
+@router.get("/numeric-distributions")
+def numeric_distributions():
+    """
+    Returns distribution data for numeric fields to visualize in range sliders.
+    Returns min, max, and histogram bins for each numeric field.
+    Uses log-scale for heavily skewed distributions.
+    """
+    df = DATASTORE.df
+    numeric_fields = [
+        'price', 'accommodates', 'bedrooms', 'bathrooms', 'beds',
+        'minimum_nights', 'maximum_nights', 'distance_from_city_center',
+        'number_of_reviews', 'availability_365'
+    ]
+    
+    # Fields with heavy skew that benefit from log scaling
+    log_scale_fields = {'price', 'minimum_nights', 'maximum_nights', 'accommodates'}
+    
+    distributions = {}
+    for field in numeric_fields:
+        if field not in df.columns:
+            continue
+        
+        data = df[field].dropna()
+        if len(data) == 0:
+            continue
+        
+        field_min = float(data.min())
+        field_max = float(data.max())
+        
+        # Use log scale for skewed distributions
+        if field in log_scale_fields and field_min > 0:
+            # Apply log transformation for histogram
+            log_data = np.log10(data + 1)  # +1 to handle zeros
+            hist, bin_edges = np.histogram(log_data, bins=50)
+        else:
+            # Linear histogram
+            hist, bin_edges = np.histogram(data, bins=50)
+        
+        distributions[field] = {
+            'min': field_min,
+            'max': field_max,
+            'histogram': hist.tolist(),
+            'bin_edges': bin_edges.tolist(),
+            'log_scale': field in log_scale_fields and field_min > 0,
+        }
+    
+    return JSONResponse(content=_sanitize_for_json(distributions))
+
+
 @router.get("/image-proxy")
 async def image_proxy(url: str):
     """Proxy remote images to avoid client-side tracking/adblock blocks.

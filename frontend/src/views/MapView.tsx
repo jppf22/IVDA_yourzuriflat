@@ -236,27 +236,21 @@ export const MapView = () => {
     // Force relayout by updating layout object
   };
 
-  // If not expanded, show minimized button
-  if (!isMapExpanded) {
-    return (
-      <div className="map-minimized">
-        <button className="map-expand-button" onClick={toggleMapExpanded} title="Expand map">
-          <span className="map-icon">🗺️</span>
-          <span className="map-expand-text">Show Map</span>
-          <span className="expand-icon">⛶</span>
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div className={`map-view ${isMapExpanded ? 'map-expanded' : ''}`}>
       <div className="map-header">
         <div className="map-title-section">
           <h3>Apartment Map</h3>
-          <button className="map-collapse-button" onClick={toggleMapExpanded} title="Minimize map">
-            <span>✕</span>
-          </button>
+          {isMapExpanded && (
+            <button className="map-collapse-button" onClick={toggleMapExpanded} title="Minimize map">
+              <span>✕</span>
+            </button>
+          )}
+          {!isMapExpanded && (
+            <button className="map-expand-button-small" onClick={toggleMapExpanded} title="Expand map">
+              <span>⛶</span>
+            </button>
+          )}
         </div>
         <div className="map-controls">
           {selectedClusterId !== null && (

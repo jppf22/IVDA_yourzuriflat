@@ -1,0 +1,116 @@
+.range-slider-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.range-slider-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+.range-slider-values {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.range-value {
+  padding: 0.25rem 0.5rem;
+  background: #f3f4f6;
+  border-radius: 4px;
+}
+
+.range-slider-wrapper {
+  position: relative;
+  height: 60px;
+  width: 100%;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 6px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+}
+
+.histogram {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+  padding: 4px 2px;
+}
+
+.histogram-bar {
+  flex: 1;
+  background: linear-gradient(to top, #d1d5db 0%, #e5e7eb 100%);
+  border-radius: 1px 1px 0 0;
+  min-width: 1px;
+  transition: background 0.2s;
+}
+
+.range-slider-wrapper:hover .histogram-bar {
+  background: linear-gradient(to top, #9ca3af 0%, #d1d5db 100%);
+}
+
+.range-track {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(147, 51, 234, 0.2) 100%);
+  border-left: 2px solid #3b82f6;
+  border-right: 2px solid #3b82f6;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.range-handle {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px;
+  height: 20px;
+  background: white;
+  border: 3px solid #3b82f6;
+  border-radius: 50%;
+  cursor: grab;
+  z-index: 2;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.range-handle:hover {
+  transform: translate(-50%, -50%) scale(1.15);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.range-handle:active {
+  cursor: grabbing;
+  transform: translate(-50%, -50%) scale(1.25);
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.5);
+}
+
+.range-handle-min {
+  border-color: #10b981;
+}
+
+.range-handle-min:hover {
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.range-handle-max {
+  border-color: #f59e0b;
+}
+
+.range-handle-max:hover {
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+}

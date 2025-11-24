@@ -143,6 +143,19 @@ export interface FilterOptionsResponse {
   neighbourhood_groups: string[];
 }
 
+// Numeric field distribution for visualizing range sliders
+export interface NumericDistribution {
+  min: number;
+  max: number;
+  histogram: number[];
+  bin_edges: number[];
+  log_scale?: boolean;
+}
+
+export interface NumericDistributionsResponse {
+  [field: string]: NumericDistribution;
+}
+
 // Filters for apartment queries
 export interface ApartmentFilters {
   price_min?: number;
