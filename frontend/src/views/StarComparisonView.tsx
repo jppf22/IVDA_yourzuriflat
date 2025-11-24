@@ -159,7 +159,8 @@ export const StarComparisonView = () => {
         range: [0, 1],
       },
     },
-    height: 500,
+    height: 550,
+    margin: { t: 40, b: 100, l: 80, r: 140 },
     showlegend: true,
     legend: {
       orientation: 'v',
