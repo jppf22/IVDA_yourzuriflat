@@ -10,13 +10,15 @@
 
 .map-expanded {
   position: fixed;
-  top: 70px;
-  left: 330px; /* Position after sidebar (300px + 30px gap) */
-  width: calc(100% - 350px); /* Full width minus sidebar */
-  height: calc(100vh - 90px);
-  z-index: 100;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-  border-radius: 8px;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1200;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+  border-radius: 0;
 }
 
 .map-expand-button-small {
@@ -102,6 +104,7 @@
   gap: 1rem;
   padding: 1rem 1.5rem;
 }
+
 
 .map-title-section {
   display: flex;

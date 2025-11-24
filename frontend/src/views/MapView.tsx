@@ -4,7 +4,8 @@
  * Supports expandable overlay mode (minimized/full screen)
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import Plot from 'react-plotly.js';
 import { useAppStore } from '../store/useAppStore';
 import { useApartments, useClusters, useRecommendations } from '../api/hooks';
@@ -42,6 +43,17 @@ export const MapView = () => {
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [showClusters, setShowClusters] = useState(true);
   const [dragMode, setDragMode] = useState<'pan' | 'select'>('pan'); // Default to pan for better navigation
+
+  useEffect(() => {
+    if (!isMapExpanded) {
+      return;
+    }
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isMapExpanded]);
 
   const topRecommendationIds = topRecommendations.map((apt) => String(apt.id));
   const isModelTrained = ratingsCount >= 5;
@@ -189,7 +201,7 @@ export const MapView = () => {
       center: zurichCenter,
       zoom: zoomLevel,
     },
-    height: isMapExpanded ? window.innerHeight - 100 : 300,
+    height: isMapExpanded ? Math.max(window.innerHeight - 140, 400) : 300,
     margin: { t: 0, b: 0, l: 0, r: 0 },
     hovermode: 'closest',
     dragmode: dragMode,
@@ -236,7 +248,7 @@ export const MapView = () => {
     // Force relayout by updating layout object
   };
 
-  return (
+  const mapNode = (
     <div className={`map-view ${isMapExpanded ? 'map-expanded' : ''}`}>
       <div className="map-header">
         <div className="map-title-section">
@@ -381,6 +393,12 @@ export const MapView = () => {
       />
     </div>
   );
+
+  if (isMapExpanded) {
+    return createPortal(mapNode, document.body);
+  }
+
+  return mapNode;
 };
 
 export default MapView;
