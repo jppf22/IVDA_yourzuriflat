@@ -70,18 +70,25 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
     selectedForExplain ? [selectedForExplain] : undefined
   );
 
+  const calibrationComplete = useAppStore((s) => s.calibrationComplete);
+  const setCalibrationComplete = useAppStore((s) => s.setCalibrationComplete);
+
   // Auto-show explainability panel after calibration (5+ ratings) - only once
   useEffect(() => {
-    if (ratingsCount >= 5 && recommendationsArray.length > 0 && !showExplainability) {
+    if (
+      !calibrationComplete &&              // only if we haven't marked it complete yet
+      ratingsCount >= 5 &&
+      recommendationsArray.length > 0 &&
+      !showExplainability
+    ) {
       setShowExplainability(true);
-      // Auto-select first recommendation for explanation only if nothing is selected
+      setCalibrationComplete(true);        // latch: don't auto-open again
+
       if (!selectedForExplain && recommendationsArray[0]) {
         setSelectedForExplain(String(recommendationsArray[0].apartment.id));
       }
     }
-    // Note: Don't include selectedForExplain or recommendationsArray in deps to avoid re-triggering
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ratingsCount, showExplainability]);
+  }, [ratingsCount, calibrationComplete, showExplainability]);
 
   // Update top recommendations in an effect (avoid state change during render)
   useEffect(() => {
