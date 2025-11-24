@@ -86,8 +86,11 @@ export const LayoutView = () => {
 
       {/* Main Content */}
       <div className="main-content">
-        {/* Sidebar with Filters */}
+        {/* Sidebar with Map and Filters */}
         <aside className="sidebar">
+          <div className="sidebar-map">
+            <MapView />
+          </div>
           <FilterPanel />
         </aside>
 
@@ -98,11 +101,8 @@ export const LayoutView = () => {
             <RecommendedListView onRate={handleRate} onRemoveRating={handleRemoveRating} currentRatings={currentRatings} />
           </section>
 
-          {/* Middle Section: Map and PCA */}
+          {/* Middle Section: PCA */}
           <section className="section-visualizations">
-            <div className="viz-panel">
-              <MapView />
-            </div>
             <div className="viz-panel">
               <PCAScatterView />
             </div>

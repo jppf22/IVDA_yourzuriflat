@@ -188,7 +188,7 @@ export const MapView = () => {
       center: zurichCenter,
       zoom: zoomLevel,
     },
-    height: isMapExpanded ? window.innerHeight - 100 : 500,
+    height: isMapExpanded ? window.innerHeight - 100 : 300,
     margin: { t: 0, b: 0, l: 0, r: 0 },
     hovermode: 'closest',
     dragmode: 'select',
