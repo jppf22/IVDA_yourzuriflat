@@ -145,8 +145,8 @@ export const useRecommendations = (sessionId: string, limit: number = 20, rating
     queryKey: ['recommendations', sessionId, limit, filterSig, selectionSig, ratingsCount],
     queryFn: () => apiClient.get<RecommendationsResponse>('/recommendations', params),
     enabled: !!sessionId,
-    staleTime: 0,
-    refetchOnMount: 'always',
+    staleTime: 30000, // 30 seconds - prevents unnecessary refetches while scrolling
+    refetchOnMount: false, // Don't refetch on mount to preserve scroll position
   });
 };
 
@@ -320,13 +320,16 @@ export const useRateMutation = () => {
       const isExplainabilityQuery = (queryKey: unknown): boolean =>
         Array.isArray(queryKey) && queryKey[0] === 'explainability' && queryKey[1] === variables.session_id;
 
-      // Force a fresh recommendation pull so list + color encodings stay in sync after every rating.
+      // Mark queries as stale - they'll refetch in background without scroll jump
       await queryClient.invalidateQueries({ predicate: (q) => isRecommendationsQuery(q.queryKey) });
-      await queryClient.refetchQueries({ predicate: (q) => isRecommendationsQuery(q.queryKey), type: 'active' });
-
-      // Refresh explainability panels for the same session (covers selected + top-N ids).
       await queryClient.invalidateQueries({ predicate: (q) => isExplainabilityQuery(q.queryKey) });
-      await queryClient.refetchQueries({ predicate: (q) => isExplainabilityQuery(q.queryKey), type: 'active' });
+      
+      // Trigger background refetch without forcing immediate update
+      queryClient.refetchQueries({ 
+        predicate: (q) => isRecommendationsQuery(q.queryKey), 
+        type: 'active',
+        cancelRefetch: false 
+      });
     },
     onError: (error) => {
       console.error('Rating submission failed:', error);
@@ -348,13 +351,16 @@ export const useRemoveRatingMutation = () => {
       const isExplainabilityQuery = (queryKey: unknown): boolean =>
         Array.isArray(queryKey) && queryKey[0] === 'explainability' && queryKey[1] === variables.session_id;
 
-      // Force a fresh recommendation pull so list + color encodings stay in sync after rating removal.
+      // Mark queries as stale - they'll refetch in background without scroll jump
       await queryClient.invalidateQueries({ predicate: (q) => isRecommendationsQuery(q.queryKey) });
-      await queryClient.refetchQueries({ predicate: (q) => isRecommendationsQuery(q.queryKey), type: 'active' });
-
-      // Refresh explainability panels for the same session.
       await queryClient.invalidateQueries({ predicate: (q) => isExplainabilityQuery(q.queryKey) });
-      await queryClient.refetchQueries({ predicate: (q) => isExplainabilityQuery(q.queryKey), type: 'active' });
+      
+      // Trigger background refetch without forcing immediate update
+      queryClient.refetchQueries({ 
+        predicate: (q) => isRecommendationsQuery(q.queryKey), 
+        type: 'active',
+        cancelRefetch: false 
+      });
     },
     onError: (error) => {
       console.error('Rating removal failed:', error);

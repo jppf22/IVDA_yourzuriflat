@@ -6,7 +6,7 @@
 
 import { useAppStore } from '../store/useAppStore';
 import { useRecommendations, useInitialSample, useExplainability } from '../api/hooks';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { RatingControl } from '../components/RatingControl';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorMessage } from '../components/ErrorMessage';
@@ -46,13 +46,20 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
   const [activeTab, setActiveTab] = useState<TabView>('all');
   const [showExplainability, setShowExplainability] = useState(false);
   const [selectedForExplain, setSelectedForExplain] = useState<string | null>(null);
+  
+  // Pagination state for infinite scroll
+  const [displayLimit, setDisplayLimit] = useState(20);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const scrollPositionRef = useRef<number>(0);
 
   const {
     data: recommendationsData,
     isLoading,
     isError,
     refetch,
-  } = useRecommendations(sessionId, 20, ratingsCount);
+  } = useRecommendations(sessionId, displayLimit, ratingsCount);
 
   const {
     data: initialSampleData,
@@ -145,6 +152,70 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
       }
     }
   }, [recommendationsArray, topRecommendations, setTopRecommendations]);
+
+  // Reset displayLimit when tab changes
+  useEffect(() => {
+    setDisplayLimit(20);
+  }, [activeTab]);
+
+  // Preserve scroll position during updates
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (container && scrollPositionRef.current > 0) {
+      // Restore scroll position after React has updated the DOM
+      requestAnimationFrame(() => {
+        container.scrollTop = scrollPositionRef.current;
+      });
+    }
+  }, [recommendationsArray, filteredRecommendations]);
+
+  // Save scroll position before potential updates
+  const saveScrollPosition = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (container) {
+      scrollPositionRef.current = container.scrollTop;
+    }
+  }, []);
+
+  // Infinite scroll: Load more items when scrolling near bottom
+  const loadMoreItems = useCallback(() => {
+    if (isLoadingMore || isLoading) return;
+    
+    const currentFetched = recommendationsArray.length;
+    const currentLimit = displayLimit;
+    
+    // Only load more if we've hit our current limit (suggesting more data might be available)
+    if (currentFetched >= currentLimit) {
+      saveScrollPosition();
+      setIsLoadingMore(true);
+      setDisplayLimit(prev => prev + 20);
+      setTimeout(() => setIsLoadingMore(false), 300);
+    }
+  }, [isLoadingMore, isLoading, recommendationsArray.length, displayLimit, saveScrollPosition]);
+
+  // Setup intersection observer for infinite scroll
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (first.isIntersecting) {
+          loadMoreItems();
+        }
+      },
+      { threshold: 0.1, rootMargin: '100px' }
+    );
+
+    const currentRef = loadMoreRef.current;
+    if (currentRef) {
+      observer.observe(currentRef);
+    }
+
+    return () => {
+      if (currentRef) {
+        observer.unobserve(currentRef);
+      }
+    };
+  }, [loadMoreItems]);
 
   const topRecommendationIds = topRecommendations.map((apt) => String(apt.id));
 
@@ -293,7 +364,7 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
       </div>
 
       <div className={`content-container ${showExplainability ? 'with-panel' : 'full-width'}`}>
-        <div className="list-container">
+        <div className="list-container" ref={scrollContainerRef}>
         <table className="apartments-table">
           <thead>
             <tr>
@@ -419,6 +490,25 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
             })}
           </tbody>
         </table>
+
+        {/* Infinite scroll trigger and load more indicator */}
+        <div 
+          ref={loadMoreRef} 
+          className="load-more-trigger"
+          style={{ 
+            height: '20px', 
+            margin: '20px 0',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center'
+          }}
+        >
+          {isLoadingMore && (
+            <div className="loading-more-indicator">
+              <span>Loading more apartments...</span>
+            </div>
+          )}
+        </div>
 
         {/* Empty state for filtered views */}
         {recommendations.length === 0 && (
