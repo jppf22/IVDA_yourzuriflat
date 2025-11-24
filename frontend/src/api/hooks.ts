@@ -203,7 +203,10 @@ export const usePCA = (
 };
 
 // Explainability - feature contributions
-export const useExplainability = (sessionId: string, apartmentIds?: string[]) => {
+export const useExplainability = (sessionId: string, apartmentIds?: string[], modelTrained?: boolean) => {
+  const { ratingsCount } = useAppStore();
+  const isModelReady = modelTrained ?? (ratingsCount >= 5);
+  
   return useQuery<ExplainabilityResponse>({
     queryKey: queryKeys.explainability(sessionId, apartmentIds),
     queryFn: () =>
@@ -211,7 +214,7 @@ export const useExplainability = (sessionId: string, apartmentIds?: string[]) =>
         session_id: sessionId,
         apartment_ids: apartmentIds?.join(','),
       }),
-    enabled: !!sessionId && apartmentIds !== undefined && apartmentIds.length > 0,
+    enabled: !!sessionId && apartmentIds !== undefined && apartmentIds.length > 0 && isModelReady,
     staleTime: 0,
   });
 };

@@ -6,12 +6,12 @@ Interactive Visual Data Analysis (IVDA) tool for Zurich apartment rentals. **Con
 ## Architecture
 
 ### Frontend: React + Vite + TypeScript
-**Location**: `myzuriflat_frontend/`
+**Location**: `frontend/` (NOTE: Not `myzuriflat_frontend/`)
 - **State**: React Query (server) + Zustand (`store/useAppStore.ts`) for UI state
 - **Viz**: Plotly.js ONLY - no additional chart libraries
 - **Multi-view coordination**: Linked brushing via `selectedApartmentIds` and `brushedApartmentIds` in Zustand store
 - **Color encoding**: Top 5 recommendations use consistent colors across all views (see `utils/colors.ts`)
-- **Before/after comparison**: Consider toggle or small multiples to show model output changes as users add ratings
+- **Bookmarking**: Bookmark apartments across sessions via `bookmarkedApartmentIds` in Zustand (persisted)
 
 ### Backend: Python + FastAPI
 **Location**: `backend/`
@@ -48,7 +48,7 @@ Backend runs at `http://localhost:8000`
 
 ### Start Frontend
 ```pwsh
-cd myzuriflat_frontend
+cd frontend
 npm install
 npm run dev
 ```
@@ -61,7 +61,7 @@ cd backend
 pytest
 
 # Frontend
-cd myzuriflat_frontend
+cd frontend
 npm test
 ```
 
@@ -70,8 +70,8 @@ npm test
 2. **`AGENT.md`** - Project guidelines (608 lines) - may be outdated, cross-reference with notebook
 3. **`backend/app/models/session_model.py`** - Content-based cosine similarity model
 4. **`backend/app/data/loader.py`** - Data preprocessing (implements notebook logic)
-5. **`myzuriflat_frontend/src/store/useAppStore.ts`** - Global UI state (239 lines)
-6. **`myzuriflat_frontend/src/api/types.ts`** - Type contracts with backend
+5. **`frontend/src/store/useAppStore.ts`** - Global UI state with bookmarks and ratings
+6. **`frontend/src/api/types.ts`** - Type contracts with backend
 
 ## Project-Specific Patterns
 
@@ -126,12 +126,16 @@ Content-based model using **cosine similarity**, not regression:
 
 ## API Endpoints Reference
 - `GET /apartments` - Paginated list with 20+ filter params (see `routes.py` line 61)
+  - **Supports cluster filtering**: `?cluster_id=X` parameter to filter by K-means cluster
 - `GET /apartments/{id}` - Single apartment detail
 - `POST /ratings` - Submit rating, triggers model update
+- `DELETE /ratings` - Remove a rating by apartment_id and session_id, returns updated ratings_count
+- `GET /ratings?session_id=X` - Get all ratings for a session
 - `GET /recommendations?session_id=X` - Top-N ranked by cosine similarity
+  - **Supports cluster filtering**: `?cluster_id=X` parameter to filter recommendations by cluster
 - `GET /pca?attributes=X,Y&mode=raw|pca` - 2D projection for scatter view
-- `GET /explainability?session_id=X&apartment_ids=Y` - Feature contributions
-- `GET /clusters` - K-means clusters for map view
+- `GET /explainability?session_id=X&apartment_ids=Y` - Feature contributions (requires 5+ ratings)
+- `GET /clusters` - K-means clusters (5 clusters) for map view
 - `GET /initial-sample` - Farthest-first sample for cold-start calibration
 - `GET /filter-options` - Available room types, neighbourhoods, etc.
 
@@ -211,15 +215,65 @@ pytest --cov=app tests/  # With coverage
      - Similarity score displayed prominently
      - Toggle button to show/hide panel without losing state
    - **Files Modified**:
-     - `myzuriflat_frontend/src/views/RecommendedListView.tsx` - Added useState hooks, useExplainability hook, panel rendering
-     - `myzuriflat_frontend/src/views/RecommendedListView.css` - Added 300+ lines for split layout, panel styling, contribution bars
+     - `frontend/src/views/RecommendedListView.tsx` - Added useState hooks, useExplainability hook, panel rendering
+     - `frontend/src/views/RecommendedListView.css` - Added 300+ lines for split layout, panel styling, contribution bars
    - **User Flow**: Rate apartments → After 5 ratings → Panel auto-shows → Click 💡 on any apartment → See why it was recommended
 
-3. **Enhanced Cold-Start Calibration** (Backend):
+3. **✅ COMPLETED: Cluster Filtering** (Backend + Frontend):
+   - **Backend**: K-means clustering (5 clusters, random_state=0) computed dynamically on filtered data
+   - **Endpoints**: `GET /apartments?cluster_id=X` and `GET /recommendations?cluster_id=X` support cluster filtering
+   - **Frontend**: Cluster filter in UI allows users to filter apartments by geographic/feature-based clusters
+   - **Files Modified**:
+     - `backend/app/api/routes.py` - Added cluster filtering logic to /apartments and /recommendations
+     - Frontend components updated to support cluster_id parameter
+
+4. **✅ COMPLETED: Rating Management** (Backend + Frontend):
+   - **Backend**: `DELETE /ratings` and `GET /ratings` endpoints for rating removal and retrieval
+   - **Frontend**: Remove button (❌) on rated apartments in RecommendedListView
+   - **Features**:
+     - Delete ratings with automatic UI updates across all views
+     - Backend returns updated ratings_count after deletion
+     - React Query automatically invalidates recommendations and explainability caches
+   - **Files Modified**:
+     - `backend/app/models/session_model.py` - Added remove_rating() and get_ratings() methods
+     - `backend/app/api/routes.py` - Added DELETE and GET /ratings endpoints
+     - `frontend/src/api/hooks.ts` - Added useRemoveRatingMutation() hook
+     - `frontend/src/views/RecommendedListView.tsx` - Added remove button UI
+
+5. **✅ COMPLETED: Tabbed View & Bookmarks** (Frontend):
+   - **Three Tabs in RecommendedListView**:
+     - 📋 **All Listings**: Shows all apartments (default view)
+     - ⭐ **My Ratings**: Shows only rated apartments (filtered by currentRatings)
+     - 📌 **Bookmarked**: Shows only bookmarked apartments
+   - **Bookmark System**:
+     - Click 📌 button to bookmark any apartment
+     - Bookmarked apartments show 🔖 icon
+     - Bookmarks persist in browser storage (Zustand persistence)
+     - Toggle on/off with visual feedback (gray → yellow)
+   - **Dynamic Counters**: Each tab shows live count of apartments
+   - **Empty States**: Helpful messages when filtered tabs are empty
+   - **Files Modified**:
+     - `frontend/src/store/useAppStore.ts` - Added bookmarkedApartmentIds, toggleBookmark(), clearBookmarks()
+     - `frontend/src/views/RecommendedListView.tsx` - Added tab state, filtering logic, bookmark buttons
+     - `frontend/src/views/RecommendedListView.css` - Tab navigation and bookmark button styles
+
+6. **✅ COMPLETED: Explainability Model Training Check** (Frontend):
+   - **Implementation**: Added model readiness check to prevent API errors
+   - **Features**:
+     - `useExplainability` hook checks `ratingsCount >= 5` before making API calls
+     - ExplainabilityView shows calibration message when model not ready
+     - Displays progress: "Current ratings: X/5"
+     - Prevents 400 errors from backend when model not trained
+   - **Files Modified**:
+     - `frontend/src/api/hooks.ts` - Added modelTrained parameter and isModelReady check
+     - `frontend/src/views/ExplainabilityView.tsx` - Added isModelReady state and calibration message
+     - `frontend/src/views/RecommendedListView.tsx` - Passes isModelReady to useExplainability
+
+7. **Enhanced Cold-Start Calibration** (Backend):
    - Farthest-point sampling logic exists in notebook but may need refinement
    - Consider showing user WHY these 5 listings were selected (diversity explanation)
 
-4. **Dynamic Amenity Filtering** (Frontend):
+8. **Dynamic Amenity Filtering** (Frontend):
    - FilterPanel could include amenity checkboxes (WiFi, parking, etc.)
    - Backend `/apartments` endpoint needs amenity filter params
 

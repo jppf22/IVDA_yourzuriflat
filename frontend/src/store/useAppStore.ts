@@ -28,6 +28,11 @@ export interface AppState {
   setSelectedClusterId: (clusterId: number | null) => void;
   clearClusterFilter: () => void;
 
+  // Bookmarked apartments
+  bookmarkedApartmentIds: string[];
+  toggleBookmark: (id: string) => void;
+  clearBookmarks: () => void;
+
   // Top N recommendations (for consistent color encoding)
   topRecommendations: Apartment[];
   setTopRecommendations: (apartments: Apartment[]) => void;
@@ -126,9 +131,21 @@ export const useAppStore = create<AppState>()(
   setSelectedClusterId: (clusterId) => set({ selectedClusterId: clusterId }),
   clearClusterFilter: () => set({ selectedClusterId: null }),
 
+  // Bookmarked apartments
+  bookmarkedApartmentIds: [],
+  toggleBookmark: (id) => set((state) => {
+    const isBookmarked = state.bookmarkedApartmentIds.includes(id);
+    return {
+      bookmarkedApartmentIds: isBookmarked
+        ? state.bookmarkedApartmentIds.filter((aptId) => aptId !== id)
+        : [...state.bookmarkedApartmentIds, id],
+    };
+  }),
+  clearBookmarks: () => set({ bookmarkedApartmentIds: [] }),
+
   // Top recommendations
   topRecommendations: [],
-  setTopRecommendations: (apartments) => set({ topRecommendations: apartments.slice(0, 5) }),
+  setTopRecommendations: (apartments) => set({ topRecommendations: apartments }),
 
   // Filters
   filters: defaultFilters,

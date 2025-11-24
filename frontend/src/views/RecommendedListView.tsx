@@ -26,6 +26,8 @@ interface RecommendedListViewProps {
   currentRatings: Record<string, number>;
 }
 
+type TabView = 'all' | 'rated' | 'bookmarked';
+
 export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: RecommendedListViewProps) => {
   const {
     sessionId,
@@ -36,9 +38,12 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
     setTopRecommendations,
     brushedApartmentIds,
     ratingsCount,
+    bookmarkedApartmentIds,
+    toggleBookmark,
   } = useAppStore();
 
-  // Local state for explainability panel
+  // Local state for tabs and explainability panel
+  const [activeTab, setActiveTab] = useState<TabView>('all');
   const [showExplainability, setShowExplainability] = useState(false);
   const [selectedForExplain, setSelectedForExplain] = useState<string | null>(null);
 
@@ -61,13 +66,54 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
     return recommendationsData.recommendations as Recommendation[];
   }, [recommendationsData]);
 
+  // Prepare display recommendations (before any early returns)
+  const fallbackRecommendations: Recommendation[] = useMemo(() => {
+    if (!initialSampleData || !Array.isArray(initialSampleData.apartments)) return [];
+    return initialSampleData.apartments.map((apt) => ({ apartment: apt, predicted_score: 0 as number }));
+  }, [initialSampleData]);
+
+  const hasRecommendations = recommendationsArray.length > 0;
+  const displayRecommendations = hasRecommendations ? recommendationsArray : fallbackRecommendations;
+
+  // Filter recommendations based on active tab (must be before early returns)
+  const filteredRecommendations = useMemo(() => {
+    if (activeTab === 'rated') {
+      return displayRecommendations.filter(r => 
+        currentRatings[String(r.apartment.id)] !== undefined
+      );
+    }
+    if (activeTab === 'bookmarked') {
+      return displayRecommendations.filter(r => 
+        bookmarkedApartmentIds.includes(String(r.apartment.id))
+      );
+    }
+    return displayRecommendations;
+  }, [displayRecommendations, activeTab, currentRatings, bookmarkedApartmentIds]);
+
+  // Count for each tab
+  const ratedCount = useMemo(() => 
+    displayRecommendations.filter(r => 
+      currentRatings[String(r.apartment.id)] !== undefined
+    ).length,
+    [displayRecommendations, currentRatings]
+  );
+
+  const bookmarkedCount = useMemo(() => 
+    displayRecommendations.filter(r => 
+      bookmarkedApartmentIds.includes(String(r.apartment.id))
+    ).length,
+    [displayRecommendations, bookmarkedApartmentIds]
+  );
+
   // Explainability for selected apartment
+  const isModelReady = ratingsCount >= 5;
   const {
     data: explainData,
     isLoading: isExplainLoading,
   } = useExplainability(
     sessionId,
-    selectedForExplain ? [selectedForExplain] : undefined
+    selectedForExplain ? [selectedForExplain] : undefined,
+    isModelReady
   );
 
   const calibrationComplete = useAppStore((s) => s.calibrationComplete);
@@ -118,14 +164,6 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
     );
   }
 
-  const fallbackRecommendations: Recommendation[] = initialSampleData && Array.isArray(initialSampleData.apartments)
-    ? initialSampleData.apartments.map((apt) => ({ apartment: apt, predicted_score: 0 as number }))
-    : [];
-
-  const hasRecommendations = recommendationsArray.length > 0;
-  const recommendationsSource = hasRecommendations ? 'model' : 'initial';
-  const displayRecommendations = hasRecommendations ? recommendationsArray : fallbackRecommendations;
-
   if (!displayRecommendations || displayRecommendations.length === 0) {
     return (
       <div className="recommended-list-view">
@@ -140,7 +178,7 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
   }
 
   const model_trained = recommendationsData?.model_trained ?? false;
-  const recommendations = displayRecommendations;
+  const recommendations = filteredRecommendations;
 
   // Calculate min/max scores for gradient visualization
   const scores = recommendations.map(r => r.predicted_score);
@@ -219,6 +257,29 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
             </button>
           )}
         </div>
+
+        {/* Tab Navigation */}
+        <div className="tab-navigation">
+          <button
+            className={`tab-button ${activeTab === 'all' ? 'active' : ''}`}
+            onClick={() => setActiveTab('all')}
+          >
+            📋 All Listings <span className="tab-count">({displayRecommendations.length})</span>
+          </button>
+          <button
+            className={`tab-button ${activeTab === 'rated' ? 'active' : ''}`}
+            onClick={() => setActiveTab('rated')}
+          >
+            ⭐ My Ratings <span className="tab-count">({ratedCount})</span>
+          </button>
+          <button
+            className={`tab-button ${activeTab === 'bookmarked' ? 'active' : ''}`}
+            onClick={() => setActiveTab('bookmarked')}
+          >
+            🔖 Bookmarked <span className="tab-count">({bookmarkedCount})</span>
+          </button>
+        </div>
+
         {!model_trained && (
           <div className="calibration-notice">
             ⚠️ Model not yet trained. Rate {Math.max(0, 5 - ratingsCount)} more apartment{ratingsCount < 4 ? 's' : ''} for personalized recommendations.
@@ -329,6 +390,13 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
                   <td className="col-actions">
                     <div className="action-buttons">
                       <button
+                        className={`bookmark-button ${bookmarkedApartmentIds.includes(aptId) ? 'bookmarked' : ''}`}
+                        onClick={() => toggleBookmark(aptId)}
+                        title={bookmarkedApartmentIds.includes(aptId) ? 'Remove bookmark' : 'Bookmark apartment'}
+                      >
+                        {bookmarkedApartmentIds.includes(aptId) ? '🔖' : '📌'}
+                      </button>
+                      <button
                         className="view-details-button"
                         onClick={() => openDetailDrawer(aptId)}
                         title="View full details"
@@ -351,6 +419,18 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
             })}
           </tbody>
         </table>
+
+        {/* Empty state for filtered views */}
+        {recommendations.length === 0 && (
+          <div className="empty-tab-state">
+            {activeTab === 'rated' && (
+              <p>📝 You haven't rated any apartments yet. Rate apartments to see them here!</p>
+            )}
+            {activeTab === 'bookmarked' && (
+              <p>🔖 No bookmarked apartments. Click the bookmark button (📌) to save apartments for later!</p>
+            )}
+          </div>
+        )}
         </div>
 
         {/* Explainability Side Panel */}

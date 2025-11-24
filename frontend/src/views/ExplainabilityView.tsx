@@ -17,7 +17,7 @@ import type { Data, Layout } from 'plotly.js';
 import './ExplainabilityView.css';
 
 export const ExplainabilityView = () => {
-  const { sessionId, selectedApartmentIds, topRecommendations } = useAppStore();
+  const { sessionId, selectedApartmentIds, topRecommendations, ratingsCount } = useAppStore();
 
   // Use selected apartments or top 3 recommendations
   const apartmentIds:
@@ -27,9 +27,13 @@ export const ExplainabilityView = () => {
       ? selectedApartmentIds.slice(0, 3)
       : topRecommendations.slice(0, 3).map((apt) => String(apt.id));
 
+  // Check if model is ready (5+ ratings)
+  const isModelReady = ratingsCount >= 5;
+
   const { data: explainabilityData, isLoading, isError, error, refetch } = useExplainability(
     sessionId,
-    apartmentIds
+    apartmentIds,
+    isModelReady
   );
 
   const modelNotTrained = Boolean(
@@ -70,6 +74,19 @@ export const ExplainabilityView = () => {
       mounted = false;
     };
   }, [explainabilityData]);
+
+  // Show calibration message if model not ready
+  if (!isModelReady) {
+    return (
+      <div className="explainability-view">
+        <div className="empty-state">
+          <h3>🎯 Model Calibration Needed</h3>
+          <p>Rate at least 5 apartments to train the model and see feature explanations.</p>
+          <p className="progress-text">Current ratings: {ratingsCount}/5</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
