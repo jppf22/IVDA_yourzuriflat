@@ -3,7 +3,7 @@
  * Supports all IVDA tasks (T1-T6)
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { RecommendedListView } from './RecommendedListView';
 import { MapView } from './MapView';
 import { PCAScatterView } from './PCAScatterView';
@@ -16,15 +16,14 @@ import { useRateMutation, useRemoveRatingMutation } from '../api/hooks';
 import './LayoutView.css';
 
 export const LayoutView = () => {
-  const { sessionId, setRatingsCount, ratingsCount } = useAppStore();
-  const [currentRatings, setCurrentRatings] = useState<Record<string, number>>({});
+  const { sessionId, setRatingsCount, ratingsCount, userRatings, setUserRating, removeUserRating } = useAppStore();
 
   const rateMutation = useRateMutation();
   const removeRatingMutation = useRemoveRatingMutation();
 
   const handleRate = (apartmentId: string, rating: number) => {
-    // Update local state immediately
-    setCurrentRatings((prev) => ({ ...prev, [apartmentId]: rating }));
+    // Update persisted store immediately
+    setUserRating(apartmentId, rating);
 
     // Submit to backend
     rateMutation.mutate(
@@ -39,19 +38,15 @@ export const LayoutView = () => {
         },
         onError: (error) => {
           console.error('Failed to submit rating:', error);
-          // Optionally revert local state on error
+          // Keep local rating even if backend fails
         },
       }
     );
   };
 
   const handleRemoveRating = (apartmentId: string) => {
-    // Update local state immediately
-    setCurrentRatings((prev) => {
-      const newRatings = { ...prev };
-      delete newRatings[apartmentId];
-      return newRatings;
-    });
+    // Update persisted store immediately
+    removeUserRating(apartmentId);
 
     // Submit to backend
     removeRatingMutation.mutate(
@@ -65,7 +60,7 @@ export const LayoutView = () => {
         },
         onError: (error) => {
           console.error('Failed to remove rating:', error);
-          // Optionally restore local state on error
+          // Keep local state even if backend fails
         },
       }
     );
@@ -98,7 +93,7 @@ export const LayoutView = () => {
         <main className="primary-area">
           {/* Top Section: Recommended List */}
           <section className="section-recommended">
-            <RecommendedListView onRate={handleRate} onRemoveRating={handleRemoveRating} currentRatings={currentRatings} />
+            <RecommendedListView onRate={handleRate} onRemoveRating={handleRemoveRating} currentRatings={userRatings} />
           </section>
 
           {/* Middle Section: PCA */}
@@ -121,7 +116,7 @@ export const LayoutView = () => {
       </div>
 
       {/* Detail Drawer */}
-      <ApartmentDetailDrawer onRate={handleRate} onRemoveRating={handleRemoveRating} currentRatings={currentRatings} />
+      <ApartmentDetailDrawer onRate={handleRate} onRemoveRating={handleRemoveRating} currentRatings={userRatings} />
     </div>
   );
 };

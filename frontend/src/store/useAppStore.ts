@@ -66,6 +66,12 @@ export interface AppState {
   ratingsCount: number;
   setRatingsCount: (count: number) => void;
 
+  // User ratings (persisted locally)
+  userRatings: Record<string, number>;
+  setUserRating: (apartmentId: string, rating: number) => void;
+  removeUserRating: (apartmentId: string) => void;
+  clearAllRatings: () => void;
+
   // Star (radar) chart dynamic attributes
   starAttributes: string[];
   setStarAttributes: (attrs: string[]) => void;
@@ -184,6 +190,24 @@ export const useAppStore = create<AppState>()(
   ratingsCount: 0,
   setRatingsCount: (count) => set({ ratingsCount: count }),
 
+  // User ratings
+  userRatings: {},
+  setUserRating: (apartmentId, rating) =>
+    set((state) => ({
+      userRatings: { ...state.userRatings, [apartmentId]: rating },
+      ratingsCount: Object.keys({ ...state.userRatings, [apartmentId]: rating }).length,
+    })),
+  removeUserRating: (apartmentId) =>
+    set((state) => {
+      const newRatings = { ...state.userRatings };
+      delete newRatings[apartmentId];
+      return {
+        userRatings: newRatings,
+        ratingsCount: Object.keys(newRatings).length,
+      };
+    }),
+  clearAllRatings: () => set({ userRatings: {}, ratingsCount: 0 }),
+
   // Star chart attributes (persisted)
   starAttributesVersion: 1,
   starAttributes: [
@@ -257,9 +281,18 @@ export const useAppStore = create<AppState>()(
   }),
     }),
     {
-      name: 'starChartPrefs',
-      version: 1,
+      name: 'yourZuriFlatStore',
+      version: 2,
       partialize: (state) => ({
+        // Session persistence
+        sessionId: state.sessionId,
+        // Ratings persistence
+        userRatings: state.userRatings,
+        ratingsCount: state.ratingsCount,
+        calibrationComplete: state.calibrationComplete,
+        // Bookmarks persistence
+        bookmarkedApartmentIds: state.bookmarkedApartmentIds,
+        // Star chart preferences
         starAttributes: state.starAttributes,
         starAttributesVersion: state.starAttributesVersion,
       }),
