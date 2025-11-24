@@ -31,6 +31,7 @@ export const MapView = () => {
     ratingsCount,
     isMapExpanded,
     toggleMapExpanded,
+    setMapExpanded,
   } = useAppStore();
 
   // Use internal derivation of filters; avoid passing raw filter object to preserve mapping logic
@@ -263,7 +264,14 @@ export const MapView = () => {
   };
 
   const mapNode = (
-    <div className={`map-view ${isMapExpanded ? 'map-expanded' : ''}`}>
+    <div
+      className={`map-view ${isMapExpanded ? 'map-expanded' : ''}`}
+      onClick={(event) => {
+        if (isMapExpanded && event.target === event.currentTarget) {
+          setMapExpanded(false);
+        }
+      }}
+    >
       <div className="map-header">
         <div className="map-title-section">
           <h3>Apartment Map</h3>

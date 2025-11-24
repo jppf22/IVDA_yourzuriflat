@@ -5,6 +5,7 @@
  */
 
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { MouseEvent } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { useApartmentDetail } from '../api/hooks';
@@ -67,7 +68,7 @@ export const ApartmentDetailDrawer = ({
     }
   };
 
-  return (
+  return createPortal(
     <>
       <div className="drawer-backdrop" onClick={handleBackdropClick} />
       <div className="apartment-detail-drawer">
@@ -240,7 +241,8 @@ export const ApartmentDetailDrawer = ({
           )}
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 };
 
