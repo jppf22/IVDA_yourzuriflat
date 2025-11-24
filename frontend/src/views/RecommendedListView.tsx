@@ -22,10 +22,11 @@ import type { Recommendation } from '../api/types';
 
 interface RecommendedListViewProps {
   onRate: (apartmentId: string, rating: number) => void;
+  onRemoveRating: (apartmentId: string) => void;
   currentRatings: Record<string, number>;
 }
 
-export const RecommendedListView = ({ onRate, currentRatings }: RecommendedListViewProps) => {
+export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: RecommendedListViewProps) => {
   const {
     sessionId,
     selectedApartmentIds,
@@ -314,6 +315,7 @@ export const RecommendedListView = ({ onRate, currentRatings }: RecommendedListV
                       apartmentId={aptId}
                       currentRating={currentRatings[aptId]}
                       onRate={(rating) => onRate(aptId, rating)}
+                      onRemove={() => onRemoveRating(aptId)}
                       size="small"
                     />
                   </td>

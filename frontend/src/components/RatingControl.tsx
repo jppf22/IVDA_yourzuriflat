@@ -11,6 +11,7 @@ interface RatingControlProps {
   currentRating?: number;
   maxRating?: number;
   onRate: (rating: number) => void;
+  onRemove?: () => void;
   disabled?: boolean;
   size?: 'small' | 'medium' | 'large';
 }
@@ -20,6 +21,7 @@ export const RatingControl = ({
   currentRating,
   maxRating = 5,
   onRate,
+  onRemove,
   disabled = false,
   size = 'medium',
 }: RatingControlProps) => {
@@ -70,6 +72,20 @@ export const RatingControl = ({
         <span className="rating-value">
           {currentRating}/{maxRating}
         </span>
+      )}
+      {currentRating !== undefined && currentRating > 0 && onRemove && (
+        <button
+          className="remove-rating-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          disabled={disabled}
+          aria-label="Remove rating"
+          title="Remove rating"
+        >
+          ✕
+        </button>
       )}
     </div>
   );

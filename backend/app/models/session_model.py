@@ -67,6 +67,20 @@ class SessionModel:
         """Store rating for this session (apartment_id normalized to string)."""
         self.sessions.setdefault(session_id, {})[str(apartment_id)] = float(rating)
 
+    def remove_rating(self, session_id: str, apartment_id: Union[int, str]) -> bool:
+        """Remove rating for this session. Returns True if rating existed and was removed."""
+        if session_id not in self.sessions:
+            return False
+        apt_id_str = str(apartment_id)
+        if apt_id_str in self.sessions[session_id]:
+            del self.sessions[session_id][apt_id_str]
+            return True
+        return False
+
+    def get_ratings(self, session_id: str) -> Dict[str, float]:
+        """Get all ratings for a session."""
+        return self.sessions.get(session_id, {})
+
     def predict_scores(self, session_id: str) -> Optional[np.ndarray]:
         """
         Compute cosine similarity scores for all apartments for this session.

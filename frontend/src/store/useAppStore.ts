@@ -23,6 +23,11 @@ export interface AppState {
   setBrushedApartmentIds: (ids: string[]) => void;
   clearBrushed: () => void;
 
+  // Selected cluster (for filtering apartments by cluster)
+  selectedClusterId: number | null;
+  setSelectedClusterId: (clusterId: number | null) => void;
+  clearClusterFilter: () => void;
+
   // Top N recommendations (for consistent color encoding)
   topRecommendations: Apartment[];
   setTopRecommendations: (apartments: Apartment[]) => void;
@@ -115,6 +120,11 @@ export const useAppStore = create<AppState>()(
   brushedApartmentIds: [],
   setBrushedApartmentIds: (ids) => set({ brushedApartmentIds: ids }),
   clearBrushed: () => set({ brushedApartmentIds: [] }),
+
+  // Selected cluster
+  selectedClusterId: null,
+  setSelectedClusterId: (clusterId) => set({ selectedClusterId: clusterId }),
+  clearClusterFilter: () => set({ selectedClusterId: null }),
 
   // Top recommendations
   topRecommendations: [],

@@ -63,6 +63,7 @@ class RatingRequest(BaseModel):
 @router.get("/apartments", response_model=ApartmentsResponse)
 def get_apartments(
     apartment_ids: Optional[List[str]] = Query(None),
+    cluster_id: Optional[int] = Query(None),
     price_min: Optional[float] = Query(None),
     price_max: Optional[float] = Query(None),
     accommodates_min: Optional[float] = Query(None),
@@ -112,11 +113,46 @@ def get_apartments(
         filters["neighbourhoods"] = neighbourhoods
     if neighbourhood_groups:
         filters["neighbourhood_groups"] = neighbourhood_groups
+    
+    # Handle cluster filtering
+    cluster_filtered_ids = None
+    if cluster_id is not None:
+        # Get clusters and filter to specified cluster_id
+        try:
+            df_for_clustering = DATASTORE.filter_df(filters, apartment_ids=apartment_ids)
+            if df_for_clustering.shape[0] > 0:
+                drop_cols = ['id', 'name', 'host_id', 'host_name']
+                drop_cols = [c for c in drop_cols if c in df_for_clustering.columns]
+                df_model = df_for_clustering.drop(columns=drop_cols)
+                X_cluster = DATASTORE.preprocess.transform(df_model)
+                if hasattr(X_cluster, 'toarray'):
+                    X_cluster = X_cluster.toarray()
+                if X_cluster.shape[1] > 0:
+                    effective_clusters = min(5, df_for_clustering.shape[0])
+                    kmeans = KMeans(n_clusters=effective_clusters, random_state=0)
+                    labels = kmeans.fit_predict(X_cluster)
+                    # Get IDs for the requested cluster
+                    cluster_filtered_ids = [
+                        str(df_for_clustering.iloc[i]['id']) 
+                        for i, lab in enumerate(labels) 
+                        if int(lab) == cluster_id
+                    ]
+        except Exception:
+            pass
+    
     offset = (page - 1) * limit
-    # Incorporate hard subset if apartment_ids provided
-    if apartment_ids:
+    # Incorporate hard subset if apartment_ids or cluster filtering provided
+    final_ids = apartment_ids
+    if cluster_filtered_ids is not None:
+        if final_ids:
+            # Intersection of both filters
+            final_ids = list(set(final_ids) & set(cluster_filtered_ids))
+        else:
+            final_ids = cluster_filtered_ids
+    
+    if final_ids is not None:
         filters_local = dict(filters)
-        df = DATASTORE.filter_df(filters_local, apartment_ids=apartment_ids)
+        df = DATASTORE.filter_df(filters_local, apartment_ids=final_ids)
         total = len(df)
         page_df = df.iloc[offset: offset + limit]
         items = page_df.to_dict(orient="records")
@@ -144,11 +180,31 @@ def post_rating(r: RatingRequest):
     return JSONResponse(content=_sanitize_for_json(encoded))
 
 
+@router.delete("/ratings")
+def delete_rating(session_id: str = Query(...), apartment_id: str = Query(...)):
+    removed = SESSION_MODEL.remove_rating(session_id, apartment_id)
+    count = len(SESSION_MODEL.sessions.get(session_id, {}))
+    if removed:
+        encoded = jsonable_encoder({"success": True, "message": "Rating removed", "ratings_count": count})
+    else:
+        encoded = jsonable_encoder({"success": False, "message": "Rating not found", "ratings_count": count})
+    return JSONResponse(content=_sanitize_for_json(encoded))
+
+
+@router.get("/ratings")
+def get_ratings(session_id: str = Query(...)):
+    ratings = SESSION_MODEL.get_ratings(session_id)
+    count = len(ratings)
+    encoded = jsonable_encoder({"ratings": ratings, "ratings_count": count})
+    return JSONResponse(content=_sanitize_for_json(encoded))
+
+
 @router.get("/recommendations")
 def get_recommendations(
     session_id: str = Query(...),
     limit: int = 50,
     apartment_ids: Optional[List[str]] = Query(None),
+    cluster_id: Optional[int] = Query(None),
     price_min: Optional[float] = Query(None),
     price_max: Optional[float] = Query(None),
     accommodates_min: Optional[float] = Query(None),
@@ -196,7 +252,42 @@ def get_recommendations(
     if neighbourhood_groups:
         filters["neighbourhood_groups"] = neighbourhood_groups
 
-    df_filtered = DATASTORE.filter_df(filters, apartment_ids=apartment_ids)
+    # Handle cluster filtering
+    cluster_filtered_ids = None
+    if cluster_id is not None:
+        # Get clusters and filter to specified cluster_id
+        try:
+            df_for_clustering = DATASTORE.filter_df(filters, apartment_ids=apartment_ids)
+            if df_for_clustering.shape[0] > 0:
+                drop_cols = ['id', 'name', 'host_id', 'host_name']
+                drop_cols = [c for c in drop_cols if c in df_for_clustering.columns]
+                df_model = df_for_clustering.drop(columns=drop_cols)
+                X_cluster = DATASTORE.preprocess.transform(df_model)
+                if hasattr(X_cluster, 'toarray'):
+                    X_cluster = X_cluster.toarray()
+                if X_cluster.shape[1] > 0:
+                    effective_clusters = min(5, df_for_clustering.shape[0])
+                    kmeans = KMeans(n_clusters=effective_clusters, random_state=0)
+                    labels = kmeans.fit_predict(X_cluster)
+                    # Get IDs for the requested cluster
+                    cluster_filtered_ids = [
+                        str(df_for_clustering.iloc[i]['id']) 
+                        for i, lab in enumerate(labels) 
+                        if int(lab) == cluster_id
+                    ]
+        except Exception:
+            pass
+    
+    # Incorporate hard subset if apartment_ids or cluster filtering provided
+    final_ids = apartment_ids
+    if cluster_filtered_ids is not None:
+        if final_ids:
+            # Intersection of both filters
+            final_ids = list(set(final_ids) & set(cluster_filtered_ids))
+        else:
+            final_ids = cluster_filtered_ids
+    
+    df_filtered = DATASTORE.filter_df(filters, apartment_ids=final_ids)
     if df_filtered.shape[0] == 0:
         payload = {"recommendations": [], "session_id": session_id, "model_trained": False}
         encoded = jsonable_encoder(payload)

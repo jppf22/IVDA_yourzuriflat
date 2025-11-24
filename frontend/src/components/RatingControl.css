@@ -60,9 +60,45 @@
   margin-left: 0.25rem;
 }
 
+/* Remove rating button */
+.remove-rating-btn {
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-left: 0.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.remove-rating-btn:hover:not(:disabled) {
+  background: #dc2626;
+  transform: scale(1.05);
+}
+
+.remove-rating-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.remove-rating-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Focus styles for accessibility */
 .star:focus {
   outline: 2px solid #3b82f6;
   outline-offset: 2px;
   border-radius: 2px;
+}
+
+.remove-rating-btn:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
 }

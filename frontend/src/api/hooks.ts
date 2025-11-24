@@ -37,7 +37,7 @@ export const queryKeys = {
 // Apartments list with filters
 export const useApartments = (params?: ApartmentsQueryParams) => {
   // If params not explicitly passed, derive from store dynamic filters plus brushed selection
-  const { filters, brushedApartmentIds } = useAppStore();
+  const { filters, brushedApartmentIds, selectedClusterId } = useAppStore();
   const derived: Record<string, unknown> = {};
   if (!params) {
     // Map store filters into query parameters only when values exist
@@ -70,6 +70,10 @@ export const useApartments = (params?: ApartmentsQueryParams) => {
     pushIf('property_types', fAny.property_types);
     pushIf('neighbourhoods', filters.neighbourhoods);
     pushIf('neighbourhood_groups', fAny.neighbourhood_groups);
+    // Cluster filter
+    if (selectedClusterId !== null) {
+      pushIf('cluster_id', selectedClusterId);
+    }
     // Hard subset from brushed selection acts as global filter
     if (brushedApartmentIds && brushedApartmentIds.length > 0) {
       derived['apartment_ids'] = brushedApartmentIds;
@@ -77,8 +81,9 @@ export const useApartments = (params?: ApartmentsQueryParams) => {
   }
   const finalParams = params || (derived as ApartmentsQueryParams);
   const selectionSig = (brushedApartmentIds || []).join(',');
+  const clusterSig = selectedClusterId !== null ? `cluster_${selectedClusterId}` : 'all';
   return useQuery<ApartmentsResponse>({
-    queryKey: ['apartments', finalParams, selectionSig],
+    queryKey: ['apartments', finalParams, selectionSig, clusterSig],
     queryFn: () => apiClient.get<ApartmentsResponse>('/apartments', finalParams as Record<string, unknown>),
     staleTime: 5 * 60 * 1000,
   });
@@ -96,7 +101,7 @@ export const useApartmentDetail = (id: string) => {
 
 // Recommendations based on user ratings
 export const useRecommendations = (sessionId: string, limit: number = 20, ratingsCount?: number) => {
-  const { filters, brushedApartmentIds } = useAppStore();
+  const { filters, brushedApartmentIds, selectedClusterId } = useAppStore();
   const params: Record<string, unknown> = { session_id: sessionId, limit };
   const pushIf = (key: string, value: unknown) => {
     if (value !== undefined && value !== null && value !== '' && !(Array.isArray(value) && value.length === 0)) {
@@ -125,6 +130,9 @@ export const useRecommendations = (sessionId: string, limit: number = 20, rating
   pushIf('property_types', fRec.property_types);
   pushIf('neighbourhoods', filters.neighbourhoods);
   pushIf('neighbourhood_groups', fRec.neighbourhood_groups);
+  if (selectedClusterId !== null) {
+    pushIf('cluster_id', selectedClusterId);
+  }
   if (brushedApartmentIds && brushedApartmentIds.length > 0) {
     params['apartment_ids'] = brushedApartmentIds;
   }
@@ -319,6 +327,34 @@ export const useRateMutation = () => {
     },
     onError: (error) => {
       console.error('Rating submission failed:', error);
+    },
+  });
+};
+
+// Mutation for removing a rating
+export const useRemoveRatingMutation = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<RatingResponse, Error, { session_id: string; apartment_id: string }>({
+    mutationFn: ({ session_id, apartment_id }) =>
+      apiClient.delete<RatingResponse>(`/ratings?session_id=${session_id}&apartment_id=${apartment_id}`),
+    onSuccess: async (_data, variables) => {
+      const isRecommendationsQuery = (queryKey: unknown): boolean =>
+        Array.isArray(queryKey) && queryKey[0] === 'recommendations' && queryKey[1] === variables.session_id;
+
+      const isExplainabilityQuery = (queryKey: unknown): boolean =>
+        Array.isArray(queryKey) && queryKey[0] === 'explainability' && queryKey[1] === variables.session_id;
+
+      // Force a fresh recommendation pull so list + color encodings stay in sync after rating removal.
+      await queryClient.invalidateQueries({ predicate: (q) => isRecommendationsQuery(q.queryKey) });
+      await queryClient.refetchQueries({ predicate: (q) => isRecommendationsQuery(q.queryKey), type: 'active' });
+
+      // Refresh explainability panels for the same session.
+      await queryClient.invalidateQueries({ predicate: (q) => isExplainabilityQuery(q.queryKey) });
+      await queryClient.refetchQueries({ predicate: (q) => isExplainabilityQuery(q.queryKey), type: 'active' });
+    },
+    onError: (error) => {
+      console.error('Rating removal failed:', error);
     },
   });
 };

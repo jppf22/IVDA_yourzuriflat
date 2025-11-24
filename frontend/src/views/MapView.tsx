@@ -22,6 +22,8 @@ export const MapView = () => {
     brushedApartmentIds,
     setBrushedApartmentIds,
     openDetailDrawer,
+    selectedClusterId,
+    setSelectedClusterId,
   } = useAppStore();
 
   // Use internal derivation of filters; avoid passing raw filter object to preserve mapping logic
@@ -29,6 +31,7 @@ export const MapView = () => {
   const { data: clustersData, isLoading: clustersLoading, isError: clustersError, refetch: refetchClusters } = useClusters();
 
   const [zoomLevel, setZoomLevel] = useState(11);
+  const [mapStyle, setMapStyle] = useState<string>('carto-positron'); // Default clean style
 
   const topRecommendationIds = topRecommendations.map((apt) => String(apt.id));
 
@@ -71,11 +74,26 @@ export const MapView = () => {
       lon: clustersData.centroids.map((c) => c.longitude),
       marker: {
         size: clustersData.centroids.map((c) => Math.min(c.size * 2 + 10, 40)),
-        color: clustersData.centroids.map((c) => getClusterColor(c.cluster_id)),
-        opacity: 0.6,
+        color: clustersData.centroids.map((c) => 
+          selectedClusterId === c.cluster_id ? '#e74c3c' : getClusterColor(c.cluster_id)
+        ),
+        opacity: clustersData.centroids.map((c) => 
+          selectedClusterId === null || selectedClusterId === c.cluster_id ? 0.7 : 0.3
+        ),
+        line: {
+          color: clustersData.centroids.map((c) => 
+            selectedClusterId === c.cluster_id ? '#c0392b' : 'white'
+          ),
+          width: clustersData.centroids.map((c) => 
+            selectedClusterId === c.cluster_id ? 3 : 1
+          ),
+        },
       },
-      text: clustersData.centroids.map((c) => `Cluster ${c.cluster_id}<br>${c.size} apartments`),
+      text: clustersData.centroids.map((c) => 
+        `<b>Cluster ${c.cluster_id}</b><br>${c.size} apartments<br><i>Click to filter</i>`
+      ),
       hoverinfo: 'text',
+      customdata: clustersData.centroids.map((c) => c.cluster_id),
       name: 'Clusters',
     };
     traces.push(clusterTrace);
@@ -120,7 +138,7 @@ export const MapView = () => {
 
   const layout: Partial<Layout> = {
     mapbox: {
-      style: 'open-street-map',
+      style: mapStyle,
       center: zurichCenter,
       zoom: zoomLevel,
     },
@@ -132,12 +150,21 @@ export const MapView = () => {
   };
 
   const handlePlotlyClick = (data: unknown) => {
-    const eventData = data as { points?: Array<{ customdata?: string }> };
+    const eventData = data as { points?: Array<{ customdata?: string | number; curveNumber?: number }> };
     if (eventData.points && eventData.points.length > 0) {
       const point = eventData.points[0];
-      const apartmentId = point.customdata;
-      if (apartmentId) {
-        openDetailDrawer(apartmentId);
+      
+      // Check if this is a cluster click (curveNumber 0 at low zoom)
+      if (point.curveNumber === 0 && zoomLevel < 12 && typeof point.customdata === 'number') {
+        const clusterId = point.customdata;
+        // Toggle cluster selection
+        setSelectedClusterId(selectedClusterId === clusterId ? null : clusterId);
+      } else {
+        // This is an apartment click
+        const apartmentId = point.customdata;
+        if (apartmentId) {
+          openDetailDrawer(String(apartmentId));
+        }
       }
     }
   };
@@ -162,7 +189,68 @@ export const MapView = () => {
       <div className="map-header">
         <h3>Apartment Map</h3>
         <div className="map-controls">
-          <span className="zoom-indicator">Zoom: {zoomLevel.toFixed(1)}</span>
+          {selectedClusterId !== null && (
+            <div className="cluster-filter-badge">
+              <span className="filter-icon">🗂️</span>
+              <span className="filter-text">Cluster {selectedClusterId}</span>
+              <button 
+                className="clear-cluster-button"
+                onClick={() => setSelectedClusterId(null)}
+                title="Clear cluster filter"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+          
+          <label htmlFor="map-style-select" className="map-style-label">
+            Map Style:
+          </label>
+          <select 
+            id="map-style-select"
+            className="map-style-selector"
+            value={mapStyle}
+            onChange={(e) => setMapStyle(e.target.value)}
+          >
+            <option value="carto-positron">Light (Recommended)</option>
+            <option value="carto-darkmatter">Dark</option>
+            <option value="open-street-map">OpenStreetMap</option>
+            <option value="white-bg">Minimal White</option>
+            <option value="stamen-terrain">Terrain</option>
+            <option value="stamen-toner">Black & White</option>
+            <option value="stamen-watercolor">Watercolor</option>
+          </select>
+          
+          <div className="zoom-controls">
+            <label htmlFor="zoom-slider" className="zoom-label">
+              Zoom:
+            </label>
+            <button 
+              className="zoom-button"
+              onClick={() => setZoomLevel(Math.max(9, zoomLevel - 0.5))}
+              title="Zoom out"
+            >
+              −
+            </button>
+            <input
+              id="zoom-slider"
+              type="range"
+              min="9"
+              max="16"
+              step="0.5"
+              value={zoomLevel}
+              onChange={(e) => setZoomLevel(parseFloat(e.target.value))}
+              className="zoom-slider"
+            />
+            <button 
+              className="zoom-button"
+              onClick={() => setZoomLevel(Math.min(16, zoomLevel + 0.5))}
+              title="Zoom in"
+            >
+              +
+            </button>
+            <span className="zoom-indicator">{zoomLevel.toFixed(1)}</span>
+          </div>
         </div>
       </div>
       <Plot

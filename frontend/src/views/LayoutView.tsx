@@ -12,7 +12,7 @@ import { ExplainabilityView } from './ExplainabilityView';
 import { ApartmentDetailDrawer } from '../components/ApartmentDetailDrawer';
 import { FilterPanel } from '../components/FilterPanel';
 import { useAppStore } from '../store/useAppStore';
-import { useRateMutation } from '../api/hooks';
+import { useRateMutation, useRemoveRatingMutation } from '../api/hooks';
 import './LayoutView.css';
 
 export const LayoutView = () => {
@@ -20,6 +20,7 @@ export const LayoutView = () => {
   const [currentRatings, setCurrentRatings] = useState<Record<string, number>>({});
 
   const rateMutation = useRateMutation();
+  const removeRatingMutation = useRemoveRatingMutation();
 
   const handleRate = (apartmentId: string, rating: number) => {
     // Update local state immediately
@@ -39,6 +40,32 @@ export const LayoutView = () => {
         onError: (error) => {
           console.error('Failed to submit rating:', error);
           // Optionally revert local state on error
+        },
+      }
+    );
+  };
+
+  const handleRemoveRating = (apartmentId: string) => {
+    // Update local state immediately
+    setCurrentRatings((prev) => {
+      const newRatings = { ...prev };
+      delete newRatings[apartmentId];
+      return newRatings;
+    });
+
+    // Submit to backend
+    removeRatingMutation.mutate(
+      {
+        session_id: sessionId,
+        apartment_id: apartmentId,
+      },
+      {
+        onSuccess: (data) => {
+          setRatingsCount(data.ratings_count);
+        },
+        onError: (error) => {
+          console.error('Failed to remove rating:', error);
+          // Optionally restore local state on error
         },
       }
     );
@@ -68,7 +95,7 @@ export const LayoutView = () => {
         <main className="primary-area">
           {/* Top Section: Recommended List */}
           <section className="section-recommended">
-            <RecommendedListView onRate={handleRate} currentRatings={currentRatings} />
+            <RecommendedListView onRate={handleRate} onRemoveRating={handleRemoveRating} currentRatings={currentRatings} />
           </section>
 
           {/* Middle Section: Map and PCA */}
@@ -94,7 +121,7 @@ export const LayoutView = () => {
       </div>
 
       {/* Detail Drawer */}
-      <ApartmentDetailDrawer onRate={handleRate} currentRatings={currentRatings} />
+      <ApartmentDetailDrawer onRate={handleRate} onRemoveRating={handleRemoveRating} currentRatings={currentRatings} />
     </div>
   );
 };

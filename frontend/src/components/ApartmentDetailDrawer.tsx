@@ -25,11 +25,13 @@ import './ApartmentDetailDrawer.css';
 
 interface ApartmentDetailDrawerProps {
   onRate: (apartmentId: string, rating: number) => void;
+  onRemoveRating: (apartmentId: string) => void;
   currentRatings: Record<string, number>;
 }
 
 export const ApartmentDetailDrawer = ({
   onRate,
+  onRemoveRating,
   currentRatings,
 }: ApartmentDetailDrawerProps) => {
   const { detailDrawerOpen, detailApartmentId, closeDetailDrawer } = useAppStore();
@@ -138,6 +140,7 @@ export const ApartmentDetailDrawer = ({
                   apartmentId={String(apartment.id)}
                   currentRating={currentRatings[String(apartment.id)]}
                   onRate={(rating) => onRate(String(apartment.id), rating)}
+                  onRemove={() => onRemoveRating(String(apartment.id))}
                   size="large"
                 />
               </div>
