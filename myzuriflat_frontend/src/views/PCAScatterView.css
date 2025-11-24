@@ -26,6 +26,20 @@
   align-items: center;
 }
 
+.clear-selection-btn {
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  color: #b91c1c;
+  padding: 4px 8px;
+  font-size: 0.7rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.clear-selection-btn:hover {
+  background: #fecaca;
+}
+
 .control-group {
   display: flex;
   align-items: center;

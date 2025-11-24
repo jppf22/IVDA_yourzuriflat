@@ -36,8 +36,8 @@ export const queryKeys = {
 
 // Apartments list with filters
 export const useApartments = (params?: ApartmentsQueryParams) => {
-  // If params not explicitly passed, derive from store dynamic filters
-  const { filters } = useAppStore();
+  // If params not explicitly passed, derive from store dynamic filters plus brushed selection
+  const { filters, brushedApartmentIds } = useAppStore();
   const derived: Record<string, unknown> = {};
   if (!params) {
     // Map store filters into query parameters only when values exist
@@ -70,10 +70,15 @@ export const useApartments = (params?: ApartmentsQueryParams) => {
     pushIf('property_types', fAny.property_types);
     pushIf('neighbourhoods', filters.neighbourhoods);
     pushIf('neighbourhood_groups', fAny.neighbourhood_groups);
+    // Hard subset from brushed selection acts as global filter
+    if (brushedApartmentIds && brushedApartmentIds.length > 0) {
+      derived['apartment_ids'] = brushedApartmentIds;
+    }
   }
   const finalParams = params || (derived as ApartmentsQueryParams);
+  const selectionSig = (brushedApartmentIds || []).join(',');
   return useQuery<ApartmentsResponse>({
-    queryKey: queryKeys.apartments(finalParams),
+    queryKey: ['apartments', finalParams, selectionSig],
     queryFn: () => apiClient.get<ApartmentsResponse>('/apartments', finalParams as Record<string, unknown>),
     staleTime: 5 * 60 * 1000,
   });
@@ -91,7 +96,7 @@ export const useApartmentDetail = (id: string) => {
 
 // Recommendations based on user ratings
 export const useRecommendations = (sessionId: string, limit: number = 20) => {
-  const { filters } = useAppStore();
+  const { filters, brushedApartmentIds } = useAppStore();
   const params: Record<string, unknown> = { session_id: sessionId, limit };
   const pushIf = (key: string, value: unknown) => {
     if (value !== undefined && value !== null && value !== '' && !(Array.isArray(value) && value.length === 0)) {
@@ -120,12 +125,16 @@ export const useRecommendations = (sessionId: string, limit: number = 20) => {
   pushIf('property_types', fRec.property_types);
   pushIf('neighbourhoods', filters.neighbourhoods);
   pushIf('neighbourhood_groups', fRec.neighbourhood_groups);
+  if (brushedApartmentIds && brushedApartmentIds.length > 0) {
+    params['apartment_ids'] = brushedApartmentIds;
+  }
 
   // Create a stable signature string for cache separation
   const filterSig = JSON.stringify(params, Object.keys(params).sort());
 
+  const selectionSig = (brushedApartmentIds || []).join(',');
   return useQuery<RecommendationsResponse>({
-    queryKey: queryKeys.recommendations(sessionId, limit, filterSig),
+    queryKey: ['recommendations', sessionId, limit, filterSig, selectionSig],
     queryFn: () => apiClient.get<RecommendationsResponse>('/recommendations', params),
     enabled: !!sessionId,
     staleTime: 0,
@@ -137,7 +146,7 @@ export const usePCA = (
   attributes?: string[],
   outliers: boolean = false
 ) => {
-  const { filters } = useAppStore();
+  const { filters, brushedApartmentIds } = useAppStore();
   const derived: Record<string, unknown> = {
     attributes: attributes?.join(','),
     filter_outliers: outliers,
@@ -170,10 +179,14 @@ export const usePCA = (
   pushIf('property_types', fPCA.property_types);
   pushIf('neighbourhoods', filters.neighbourhoods);
   pushIf('neighbourhood_groups', fPCA.neighbourhood_groups);
+  if (brushedApartmentIds && brushedApartmentIds.length > 0) {
+    derived['apartment_ids'] = brushedApartmentIds;
+  }
 
   const filterSig = JSON.stringify(derived, Object.keys(derived).sort());
+  const selectionSig = (brushedApartmentIds || []).join(',');
   return useQuery<PCAResponse>({
-    queryKey: queryKeys.pca(attributes, undefined, outliers, filterSig),
+    queryKey: ['pca', attributes, undefined, outliers, filterSig, selectionSig],
     queryFn: () => apiClient.get<PCAResponse>('/pca', derived),
     enabled: true,
     staleTime: 5 * 60 * 1000,
@@ -196,7 +209,7 @@ export const useExplainability = (sessionId: string, apartmentIds?: string[]) =>
 
 // Clusters for map visualization
 export const useClusters = () => {
-  const { filters } = useAppStore();
+  const { filters, brushedApartmentIds } = useAppStore();
   const derived: Record<string, unknown> = {};
   const pushIf = (key: string, value: unknown) => {
     if (value !== undefined && value !== null && value !== '' && !(Array.isArray(value) && value.length === 0)) {
@@ -225,10 +238,14 @@ export const useClusters = () => {
   pushIf('property_types', fClus.property_types);
   pushIf('neighbourhoods', filters.neighbourhoods);
   pushIf('neighbourhood_groups', fClus.neighbourhood_groups);
+  if (brushedApartmentIds && brushedApartmentIds.length > 0) {
+    derived['apartment_ids'] = brushedApartmentIds;
+  }
 
   const filterSig = JSON.stringify(derived, Object.keys(derived).sort());
+  const selectionSig = (brushedApartmentIds || []).join(',');
   return useQuery<ClustersResponse>({
-    queryKey: queryKeys.clusters(filterSig),
+    queryKey: ['clusters', filterSig, selectionSig],
     queryFn: () => apiClient.get<ClustersResponse>('/clusters', derived),
     staleTime: 10 * 60 * 1000,
   });
@@ -236,7 +253,7 @@ export const useClusters = () => {
 
 // Initial sample for calibration (cold start)
 export const useInitialSample = () => {
-  const { filters } = useAppStore();
+  const { filters, brushedApartmentIds } = useAppStore();
   const params: Record<string, unknown> = {};
   const pushIf = (key: string, value: unknown) => {
     if (value !== undefined && value !== null && value !== '' && !(Array.isArray(value) && value.length === 0)) {
@@ -265,9 +282,13 @@ export const useInitialSample = () => {
   pushIf('property_types', f.property_types);
   pushIf('neighbourhoods', f.neighbourhoods);
   pushIf('neighbourhood_groups', f.neighbourhood_groups);
+  if (brushedApartmentIds && brushedApartmentIds.length > 0) {
+    params['apartment_ids'] = brushedApartmentIds;
+  }
   const filterSig = JSON.stringify(params, Object.keys(params).sort());
+  const selectionSig = (brushedApartmentIds || []).join(',');
   return useQuery<InitialSampleResponse>({
-    queryKey: queryKeys.initialSampleFiltered(filterSig),
+    queryKey: ['initialSample', filterSig, selectionSig],
     queryFn: () => apiClient.get<InitialSampleResponse>('/initial-sample', params),
     staleTime: 10 * 60 * 1000,
   });

@@ -99,9 +99,17 @@ class DataStore:
             return row.iloc[0].to_dict()
         return None
 
-    def filter_df(self, filters: dict | None) -> pd.DataFrame:
-        """Return a filtered DataFrame (no pagination) according to shared filter semantics."""
+    def filter_df(self, filters: dict | None, apartment_ids: list[str] | None = None) -> pd.DataFrame:
+        """Return a filtered DataFrame (no pagination) according to shared filter semantics.
+
+        If `apartment_ids` provided, acts as a hard subset prior to applying other filters.
+        """
         df = self.df
+        # Hard subset first (IDs stored as str)
+        if apartment_ids:
+            id_set = set(str(x) for x in apartment_ids)
+            if 'id' in df.columns:
+                df = df[df['id'].isin(id_set)]
         if not filters:
             return df
         # Numeric price shortcuts

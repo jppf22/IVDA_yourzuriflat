@@ -60,6 +60,7 @@ class RatingRequest(BaseModel):
 
 @router.get("/apartments", response_model=ApartmentsResponse)
 def get_apartments(
+    apartment_ids: Optional[List[str]] = Query(None),
     price_min: Optional[float] = Query(None),
     price_max: Optional[float] = Query(None),
     accommodates_min: Optional[float] = Query(None),
@@ -110,7 +111,15 @@ def get_apartments(
     if neighbourhood_groups:
         filters["neighbourhood_groups"] = neighbourhood_groups
     offset = (page - 1) * limit
-    items, total = DATASTORE.list_apartments(offset=offset, limit=limit, filters=filters)
+    # Incorporate hard subset if apartment_ids provided
+    if apartment_ids:
+        filters_local = dict(filters)
+        df = DATASTORE.filter_df(filters_local, apartment_ids=apartment_ids)
+        total = len(df)
+        page_df = df.iloc[offset: offset + limit]
+        items = page_df.to_dict(orient="records")
+    else:
+        items, total = DATASTORE.list_apartments(offset=offset, limit=limit, filters=filters)
     payload = {"apartments": items, "total": total, "page": page, "limit": limit}
     encoded = jsonable_encoder(payload)
     return JSONResponse(content=_sanitize_for_json(encoded))
@@ -137,6 +146,7 @@ def post_rating(r: RatingRequest):
 def get_recommendations(
     session_id: str = Query(...),
     limit: int = 50,
+    apartment_ids: Optional[List[str]] = Query(None),
     price_min: Optional[float] = Query(None),
     price_max: Optional[float] = Query(None),
     accommodates_min: Optional[float] = Query(None),
@@ -184,7 +194,7 @@ def get_recommendations(
     if neighbourhood_groups:
         filters["neighbourhood_groups"] = neighbourhood_groups
 
-    df_filtered = DATASTORE.filter_df(filters)
+    df_filtered = DATASTORE.filter_df(filters, apartment_ids=apartment_ids)
     if df_filtered.shape[0] == 0:
         payload = {"recommendations": [], "session_id": session_id, "model_trained": False}
         encoded = jsonable_encoder(payload)
@@ -241,6 +251,7 @@ def get_recommendations(
 def get_pca(
     attributes: Optional[str] = Query(None),
     filter_outliers: bool = Query(False),
+    apartment_ids: Optional[List[str]] = Query(None),
     price_min: Optional[float] = Query(None),
     price_max: Optional[float] = Query(None),
     accommodates_min: Optional[float] = Query(None),
@@ -292,7 +303,7 @@ def get_pca(
     if neighbourhood_groups:
         filters["neighbourhood_groups"] = neighbourhood_groups
 
-    df_filtered = DATASTORE.filter_df(filters)
+    df_filtered = DATASTORE.filter_df(filters, apartment_ids=apartment_ids)
     if df_filtered.shape[0] == 0 or len(selected) < 2:
         return {"points": [], "x_label": "", "y_label": "", "mode": "empty"}
 
@@ -351,6 +362,7 @@ def get_explainability(session_id: str = Query(...), apartment_ids: Optional[str
 @router.get("/clusters")
 def get_clusters(
     n_clusters: int = 5,
+    apartment_ids: Optional[List[str]] = Query(None),
     price_min: Optional[float] = Query(None),
     price_max: Optional[float] = Query(None),
     accommodates_min: Optional[float] = Query(None),
@@ -397,7 +409,7 @@ def get_clusters(
     if neighbourhood_groups:
         filters["neighbourhood_groups"] = neighbourhood_groups
 
-    df_filtered = DATASTORE.filter_df(filters)
+    df_filtered = DATASTORE.filter_df(filters, apartment_ids=apartment_ids)
     if df_filtered.shape[0] == 0:
         return {"clusters": [], "centroids": []}
 
@@ -447,6 +459,7 @@ def get_clusters(
 @router.get("/initial-sample")
 def initial_sample(
     k: int = 5,
+    apartment_ids: Optional[List[str]] = Query(None),
     price_min: Optional[float] = Query(None),
     price_max: Optional[float] = Query(None),
     accommodates_min: Optional[float] = Query(None),
@@ -494,7 +507,7 @@ def initial_sample(
     if neighbourhood_groups:
         filters["neighbourhood_groups"] = neighbourhood_groups
 
-    df_filtered = DATASTORE.filter_df(filters)
+    df_filtered = DATASTORE.filter_df(filters, apartment_ids=apartment_ids)
     if df_filtered.shape[0] == 0:
         return {"apartments": [], "sample_size": 0}
 
