@@ -19,6 +19,7 @@ import type {
   InitialSampleResponse,
   FilterOptionsResponse,
   ApartmentFilters,
+  NumericDistributionsResponse,
 } from './types';
 
 // Query keys for cache management
@@ -32,6 +33,7 @@ export const queryKeys = {
   initialSample: () => ['initialSample'] as const,
   initialSampleFiltered: (filterSig: string) => ['initialSample', filterSig] as const,
   filterOptions: () => ['filterOptions'] as const,
+  numericDistributions: () => ['numericDistributions'] as const,
 };
 
 // Apartments list with filters
@@ -392,6 +394,15 @@ export const useFilterOptions = () => {
   return useQuery<FilterOptionsResponse>({
     queryKey: queryKeys.filterOptions(),
     queryFn: () => apiClient.get<FilterOptionsResponse>('/filter-options'),
+    staleTime: 30 * 60 * 1000, // cache for 30 minutes
+  });
+};
+
+// Numeric distributions for range sliders
+export const useNumericDistributions = () => {
+  return useQuery<NumericDistributionsResponse>({
+    queryKey: queryKeys.numericDistributions(),
+    queryFn: () => apiClient.get<NumericDistributionsResponse>('/numeric-distributions'),
     staleTime: 30 * 60 * 1000, // cache for 30 minutes
   });
 };

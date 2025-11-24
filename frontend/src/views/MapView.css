@@ -19,6 +19,27 @@
   border-radius: 8px;
 }
 
+.map-expand-button-small {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.map-expand-button-small:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
+}
+
 .map-minimized {
   display: flex;
   align-items: center;
