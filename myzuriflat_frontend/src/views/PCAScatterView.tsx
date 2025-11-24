@@ -6,12 +6,12 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import Plot from 'react-plotly.js';
 import { useAppStore } from '../store/useAppStore';
-import { usePCA } from '../api/hooks';
+import { usePCA, useApartments } from '../api/hooks';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorMessage } from '../components/ErrorMessage';
 import { getColorForApartment, OPACITY } from '../utils/colors';
 import type { Data, Layout } from 'plotly.js';
-import type { PCAPoint, PCAResponse } from '../api/types';
+import type { PCAPoint, PCAResponse, Apartment } from '../api/types';
 import './PCAScatterView.css';
 
 // Fallback attribute candidates; will be extended dynamically from top recommendations
@@ -134,6 +134,7 @@ export const PCAScatterView = () => {
     brushedApartmentIds,
     setBrushedApartmentIds,
     openDetailDrawer,
+    // filters (unused here; useApartments derives from store internally)
   } = useAppStore();
   const attributes = pcaAttributes.length
     ? pcaAttributes
@@ -159,11 +160,152 @@ export const PCAScatterView = () => {
     return Array.from(new Set([...BASE_CANDIDATES, ...numericKeys]));
   }, [topRecommendations]);
 
+  // For PCA we need at least 2 attributes. Provide fallback attributes so hook stays stable.
+  const effectiveForPCA = attributes.length >= 2 ? attributes : ['price','distance_from_city_center'];
   const { data: pcaData, isLoading, isError, refetch } = usePCA(
-    attributes,
+    effectiveForPCA,
     filterOutliers
   );
+  // Fetch filtered apartments (includes selection subset if active) for single-attribute distribution
+  const { data: apartmentsData } = useApartments();
+  const singleAttr = attributes.length === 1 ? attributes[0] : undefined;
+  const apartments = apartmentsData?.apartments || [];
+  const hashToJitter = (id: string) => {
+    let h = 0;
+    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+    return (h % 1000) / 1000 * 0.1;
+  };
+  const getVal = (apt: Record<string, unknown>): number => {
+    if (!singleAttr) return 0;
+    let v: unknown = apt?.[singleAttr];
+    if (singleAttr === 'price') {
+      if (typeof v === 'string') v = v.replace(/[^0-9.]/g, '');
+      const parsed = parseFloat(String(v));
+      v = parsed;
+    }
+    return typeof v === 'number' && isFinite(v) ? v : 0;
+  };
+  const distPoints: Array<{id:string;x:number;y:number;apt:Apartment}> = singleAttr
+    ? apartments.map(a => ({
+        id: String(a.id),
+        x: getVal(a as unknown as Record<string, unknown>),
+        y: hashToJitter(String(a.id)),
+        apt: a as Apartment,
+      }))
+    : [];
   const topRecommendationIds = topRecommendations.map(apt => apt.id);
+
+  // 0 attributes selected: instruction state
+  if (attributes.length === 0) {
+    return (
+      <div className="pca-scatter-view">
+        <div className="scatter-header">
+          <h3>Attribute Scatter / PCA</h3>
+          <div className="scatter-controls">
+            <AttributeMultiSelect
+              candidates={dynamicCandidates}
+              selected={attributes}
+              onChange={next => setPcaAttributes(next)}
+            />
+            <button
+              type="button"
+              className="reset-selection-btn"
+              onClick={() => setBrushedApartmentIds([])}
+              disabled={brushedApartmentIds.length === 0}
+            >
+              Reset Selection{brushedApartmentIds.length>0?` (${brushedApartmentIds.length})`:''}
+            </button>
+          </div>
+        </div>
+        <div className="empty-state">
+          <p>Select at least one attribute (1 = distribution, 2 = raw scatter, more than 2 = PCA).</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Single attribute distribution mode
+  if (attributes.length === 1 && singleAttr) {
+    const trace: Data = {
+      type: 'scatter',
+      mode: 'markers',
+      x: distPoints.map(p=>p.x),
+      y: distPoints.map(p=>p.y),
+      marker: {
+        size: 9,
+        color: distPoints.map(p => {
+          if (selectedApartmentIds.includes(p.id)) return '#f39c12';
+          if (brushedApartmentIds.includes(p.id)) return '#3498db';
+          return getColorForApartment(p.id, topRecommendationIds);
+        }),
+        opacity: distPoints.map(p => {
+          if (selectedApartmentIds.includes(p.id)) return OPACITY.selected;
+          if (brushedApartmentIds.includes(p.id)) return OPACITY.brushed;
+          if (topRecommendationIds.includes(p.id)) return OPACITY.normal;
+          return OPACITY.dimmed;
+        }),
+      },
+      text: distPoints.map(p => {
+        const a = p.apt as Apartment;
+        const val = getVal(a as unknown as Record<string, unknown>);
+        return `<b>${a.name}</b><br>${singleAttr}: ${val}<br>${a.property_type}<br>${a.room_type}`;
+      }),
+      hoverinfo: 'text',
+      customdata: distPoints.map(p=>p.id),
+    };
+    const layout: Partial<Layout> = {
+      xaxis: { title: { text: singleAttr } },
+      yaxis: { title: { text: '' }, showticklabels: false },
+      height: 500,
+      margin: { t: 40, b: 60, l: 60, r: 40 },
+      hovermode: 'closest',
+      dragmode: 'select',
+    };
+    const handleClick = (data: unknown) => {
+      const evt = data as { points?: Array<{ customdata?: string }> };
+      if (evt.points && evt.points.length>0) {
+        const id = evt.points[0].customdata;
+        if (id) openDetailDrawer(id);
+      }
+    };
+    const handleSelect = (data: unknown) => {
+      const evt = data as { points?: Array<{ customdata?: string }> };
+      if (evt.points) {
+        const ids = evt.points.map(p=>p.customdata).filter(Boolean) as string[];
+        setBrushedApartmentIds(ids);
+      }
+    };
+    return (
+      <div className="pca-scatter-view">
+        <div className="scatter-header">
+          <h3>Attribute Distribution ({singleAttr})</h3>
+          <div className="scatter-controls">
+            <AttributeMultiSelect
+              candidates={dynamicCandidates}
+              selected={attributes}
+              onChange={next => setPcaAttributes(next)}
+            />
+            <button
+              type="button"
+              className="reset-selection-btn"
+              onClick={() => setBrushedApartmentIds([])}
+              disabled={brushedApartmentIds.length === 0}
+            >
+              Reset Selection{brushedApartmentIds.length>0?` (${brushedApartmentIds.length})`:''}
+            </button>
+          </div>
+        </div>
+        <Plot
+          data={[trace]}
+          layout={layout}
+          config={{ displayModeBar: true, displaylogo: false }}
+          onClick={handleClick}
+          onSelected={handleSelect}
+          style={{ width: '100%', height: '100%' }}
+        />
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
