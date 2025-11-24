@@ -31,6 +31,13 @@ def _sanitize_for_json(obj):
         return obj
     return obj
 
+
+def _ensure_string_id(apartment_dict):
+    """Ensure apartment ID is a string to prevent JS precision loss."""
+    if apartment_dict and 'id' in apartment_dict:
+        apartment_dict['id'] = str(apartment_dict['id'])
+    return apartment_dict
+
 from app.data.loader import DATASTORE
 from app.models.session_model import SESSION_MODEL
 
@@ -164,8 +171,13 @@ def get_apartments(
 
 
 @router.get("/apartments/{apartment_id}")
-def get_apartment(apartment_id: int):
-    apt = DATASTORE.get_apartment(apartment_id)
+def get_apartment(apartment_id: str):
+    # Parse as int to maintain compatibility, but accept string to avoid JS precision loss
+    try:
+        apt_id = int(apartment_id) if apartment_id.isdigit() else apartment_id
+    except (ValueError, AttributeError):
+        apt_id = apartment_id
+    apt = DATASTORE.get_apartment(apt_id)
     if apt is None:
         raise HTTPException(status_code=404, detail="Apartment not found")
     encoded = jsonable_encoder(apt)
@@ -333,7 +345,7 @@ def get_recommendations(
     recs = []
     for local_i in top_idx_local:
         global_idx = filtered_indices[local_i]
-        apt = DATASTORE.df.iloc[int(global_idx)].to_dict()
+        apt = _ensure_string_id(DATASTORE.df.iloc[int(global_idx)].to_dict())
         recs.append({"apartment": apt, "predicted_score": float(filtered_scores[local_i])})
     payload = {"recommendations": recs, "session_id": session_id, "model_trained": True}
     encoded = jsonable_encoder(payload)
@@ -416,7 +428,7 @@ def get_pca(
         points = []
         for _, row in plot_df.iterrows():
             apt = df_filtered[df_filtered['id'] == row['id']].iloc[0]
-            points.append({"apartment_id": str(row['id']), "x": float(row[a1]), "y": float(row[a2]), "apartment": apt.to_dict()})
+            points.append({"apartment_id": str(row['id']), "x": float(row[a1]), "y": float(row[a2]), "apartment": _ensure_string_id(apt.to_dict())})
         payload = {"points": points, "x_label": a1, "y_label": a2, "mode": "raw"}
         return JSONResponse(content=_sanitize_for_json(jsonable_encoder(payload)))
 
@@ -432,15 +444,16 @@ def get_pca(
     points = []
     for idx, row in enumerate(coords):
         apt = df_filtered[df_filtered['id'] == plot_df.iloc[idx]['id']].iloc[0]
-        points.append({"apartment_id": str(plot_df.iloc[idx]['id']), "x": float(row[0]), "y": float(row[1]), "apartment": apt.to_dict()})
-    payload = {"points": points, "x_label": "", "y_label": "", "explained_variance": pca.explained_variance_ratio_.tolist(), "mode": "pca"}
+        points.append({"apartment_id": str(plot_df.iloc[idx]['id']), "x": float(row[0]), "y": float(row[1]), "apartment": _ensure_string_id(apt.to_dict())})
+    payload = {"points": points, "x_label": "PC1", "y_label": "PC2", "mode": "pca", "explained_variance": pca.explained_variance_ratio_.tolist()}
     return JSONResponse(content=_sanitize_for_json(jsonable_encoder(payload)))
 
 
 @router.get("/explainability")
 def get_explainability(session_id: str = Query(...), apartment_ids: Optional[str] = Query(None)):
     if apartment_ids:
-        ids = [int(x) for x in apartment_ids.split(",")]
+        # Keep IDs as strings to preserve precision for large numbers
+        ids = [x.strip() for x in apartment_ids.split(",")]
     else:
         ids = []
     coeffs = SESSION_MODEL.coefficients(session_id)
@@ -528,7 +541,7 @@ def get_clusters(
     clusters = []
     for idx, lab in enumerate(labels):
         apt = df_filtered.iloc[idx]
-        clusters.append({"apartment_id": str(apt["id"]), "cluster_id": int(lab), "apartment": apt.to_dict()})
+        clusters.append({"apartment_id": str(apt["id"]), "cluster_id": int(lab), "apartment": _ensure_string_id(apt.to_dict())})
     # compute geographic centroids and sizes
     centroids = []
     for cid in range(int(labels.max()) + 1):
@@ -629,7 +642,7 @@ def initial_sample(
         chosen.append(idx)
         newd = np.linalg.norm(X_sub - X_sub[idx], axis=1)
         dists = np.minimum(dists, newd)
-    items = [df_filtered.iloc[int(i)].to_dict() for i in chosen]
+    items = [_ensure_string_id(df_filtered.iloc[int(i)].to_dict()) for i in chosen]
     payload = {"apartments": items, "sample_size": len(items)}
     encoded = jsonable_encoder(payload)
     return JSONResponse(content=_sanitize_for_json(encoded))

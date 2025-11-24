@@ -40,7 +40,7 @@ export const ExplainabilityView = () => {
     (error as AxiosError<{ detail?: string }> | undefined)?.response?.status === 400
   );
 
-  const [apartmentMap, setApartmentMap] = React.useState<Record<number, Apartment | null>>({});
+  const [apartmentMap, setApartmentMap] = React.useState<Record<string, Apartment | null>>({});
 
   // fetch apartment metadata for labels (name) for each apartment id returned
   React.useEffect(() => {
@@ -52,21 +52,24 @@ export const ExplainabilityView = () => {
         const pairs = await Promise.all(
           ids.map(async (id) => {
             try {
-              const apt = await apiClient.get<Apartment>(`/apartments/${id}`);
+              // Ensure ID is a string and properly formatted
+              const idStr = String(id);
+              const apt = await apiClient.get<Apartment>(`/apartments/${idStr}`);
               return [id, apt] as const;
-            } catch {
+            } catch (err) {
+              console.error(`Failed to fetch apartment ${id}:`, err);
               return [id, null] as const;
             }
           })
         );
         if (!mounted) return;
-        const map: Record<number, Apartment | null> = {};
+        const map: Record<string, Apartment | null> = {};
         for (const [id, apt] of pairs) {
-          map[id as number] = apt;
+          map[String(id)] = apt;
         }
         setApartmentMap(map);
-      } catch {
-        // ignore
+      } catch (err) {
+        console.error('Error fetching apartments:', err);
       }
     };
     fetchApts();
@@ -127,7 +130,7 @@ export const ExplainabilityView = () => {
   // Prepare bar chart data from numeric contributions and feature names
   const featureNames = explainabilityData.coefficients.feature_names;
   const traces: Data[] = explainabilityData.contributions.flatMap((entry) => {
-    const apt = apartmentMap[entry.apartment_id];
+    const apt = apartmentMap[String(entry.apartment_id)];
     const aptLabel = apt && apt.name ? `${apt.name.substring(0, 25)}` : `id:${entry.apartment_id}`;
     const pairs = featureNames.map((fname, idx) => ({ feature_name: fname, contribution: entry.contributions[idx] || 0 }));
     const positive = pairs.filter((c) => c.contribution > 0);

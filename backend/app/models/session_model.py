@@ -121,10 +121,13 @@ class SessionModel:
             "feature_names": DATASTORE.feature_names,
         }
 
-    def contributions_for(self, session_id: str, apartment_ids: List[int]):
+    def contributions_for(self, session_id: str, apartment_ids: List[Union[int, str]]):
         """
         Compute per-feature contributions as coef_j * x_j for the requested
         apartments, using the user preference vector as coefficients.
+        
+        Args:
+            apartment_ids: List of apartment IDs (int or str) - will be normalized to strings
         """
         coeffs = self.coefficients(session_id)
         if coeffs is None:
@@ -137,7 +140,9 @@ class SessionModel:
 
         results = []
         for aid in apartment_ids:
-            idx = id_index.get(str(aid))
+            # Normalize to string for lookup
+            aid_str = str(aid)
+            idx = id_index.get(aid_str)
             if idx is None:
                 continue
             x_row = X[idx, :]
@@ -146,13 +151,9 @@ class SessionModel:
             x_vec = np.asarray(x_row).ravel()
             contributions = (coef * x_vec).tolist()
             predicted = float(np.dot(coef, x_vec) + intercept)
-            # preserve numeric id if possible else keep string
-            try:
-                out_id = int(aid)
-            except Exception:
-                out_id = aid  # type: ignore
+            # Always return string ID to preserve precision
             results.append({
-                "apartment_id": out_id,
+                "apartment_id": aid_str,
                 "predicted_score": predicted,
                 "contributions": contributions,
             })

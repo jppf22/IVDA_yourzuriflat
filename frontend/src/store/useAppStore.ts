@@ -77,6 +77,11 @@ export interface AppState {
   activeFilterFields: string[]; // underlying data field names, not *_min/_max suffixes
   addFilterField: (field: string) => void;
   removeFilterField: (field: string) => void;
+
+  // Map expansion state
+  isMapExpanded: boolean;
+  toggleMapExpanded: () => void;
+  setMapExpanded: (expanded: boolean) => void;
 }
 
 const defaultFilters: ApartmentFilters = {
@@ -206,6 +211,11 @@ export const useAppStore = create<AppState>()(
         'distance_from_city_center',
       ],
     }),
+  // Map expansion
+  isMapExpanded: false,
+  toggleMapExpanded: () => set((state) => ({ isMapExpanded: !state.isMapExpanded })),
+  setMapExpanded: (expanded) => set({ isMapExpanded: expanded }),
+
   // Dynamic filter fields
   activeFilterFields: ['minimum_nights','accommodates','price','distance_from_city_center'],
   addFilterField: (field: string) => set((state) => (

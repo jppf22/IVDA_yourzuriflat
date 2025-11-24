@@ -181,17 +181,21 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
   const loadMoreItems = useCallback(() => {
     if (isLoadingMore || isLoading) return;
     
+    // Only trigger for 'all' tab - other tabs have finite lists
+    if (activeTab !== 'all') return;
+    
     const currentFetched = recommendationsArray.length;
+    const currentDisplayed = filteredRecommendations.length;
     const currentLimit = displayLimit;
     
-    // Only load more if we've hit our current limit (suggesting more data might be available)
-    if (currentFetched >= currentLimit) {
+    // Only load more if we've hit our current limit AND displaying all items
+    if (currentFetched >= currentLimit && currentDisplayed >= currentLimit) {
       saveScrollPosition();
       setIsLoadingMore(true);
       setDisplayLimit(prev => prev + 20);
       setTimeout(() => setIsLoadingMore(false), 300);
     }
-  }, [isLoadingMore, isLoading, recommendationsArray.length, displayLimit, saveScrollPosition]);
+  }, [isLoadingMore, isLoading, activeTab, recommendationsArray.length, filteredRecommendations.length, displayLimit, saveScrollPosition]);
 
   // Setup intersection observer for infinite scroll
   useEffect(() => {

@@ -100,7 +100,7 @@ export interface ExplainabilityCoefficients {
 }
 
 export interface ApartmentContributions {
-  apartment_id: number;
+  apartment_id: string; // Changed from number to string to preserve precision
   predicted_score: number;
   contributions: number[]; // numeric array aligned with feature_names
 }

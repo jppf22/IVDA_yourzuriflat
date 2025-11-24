@@ -1,12 +1,13 @@
 /**
  * Map View (T5 - Explore apartments, T6 - Relate attributes)
- * Plotly scattermapbox with clustering and brushing
+ * Plotly scattermapbox with clustering, brushing, and recommendation heatmap
+ * Supports expandable overlay mode (minimized/full screen)
  */
 
 import { useState } from 'react';
 import Plot from 'react-plotly.js';
 import { useAppStore } from '../store/useAppStore';
-import { useApartments, useClusters } from '../api/hooks';
+import { useApartments, useClusters, useRecommendations } from '../api/hooks';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorMessage } from '../components/ErrorMessage';
 import { getColorForApartment, getClusterColor, OPACITY } from '../utils/colors';
@@ -21,19 +22,28 @@ export const MapView = () => {
     selectedApartmentIds,
     brushedApartmentIds,
     setBrushedApartmentIds,
+    clearBrushed,
     openDetailDrawer,
     selectedClusterId,
     setSelectedClusterId,
+    sessionId,
+    ratingsCount,
+    isMapExpanded,
+    toggleMapExpanded,
   } = useAppStore();
 
   // Use internal derivation of filters; avoid passing raw filter object to preserve mapping logic
   const { data: apartmentsData, isLoading: apartmentsLoading, isError: apartmentsError, refetch: refetchApartments } = useApartments();
   const { data: clustersData, isLoading: clustersLoading, isError: clustersError, refetch: refetchClusters } = useClusters();
+  const { data: recommendationsData } = useRecommendations(sessionId, 100, ratingsCount);
 
   const [zoomLevel, setZoomLevel] = useState(11);
   const [mapStyle, setMapStyle] = useState<string>('carto-positron'); // Default clean style
+  const [showHeatmap, setShowHeatmap] = useState(false);
+  const [showClusters, setShowClusters] = useState(true);
 
   const topRecommendationIds = topRecommendations.map((apt) => String(apt.id));
+  const isModelTrained = ratingsCount >= 5;
 
   if (apartmentsLoading || clustersLoading) {
     return (
@@ -62,11 +72,47 @@ export const MapView = () => {
   // Zurich center coordinates
   const zurichCenter = { lat: 47.3769, lon: 8.5417 };
 
+  // Prepare recommendation score map for heatmap
+  const recommendationScores: Record<string, number> = {};
+  if (recommendationsData?.recommendations) {
+    recommendationsData.recommendations.forEach((rec) => {
+      // rec has structure: { apartment: Apartment, predicted_score: number }
+      const aptId = String(rec.apartment.id);
+      const score = rec.predicted_score;
+      recommendationScores[aptId] = score;
+    });
+  }
+
   // Prepare data for Plotly
   const traces: Data[] = [];
 
-  if (zoomLevel < 12 && clustersData) {
-    // Show cluster centroids at low zoom
+  // Add heatmap layer if enabled and model is trained
+  if (showHeatmap && isModelTrained && recommendationsData?.recommendations) {
+    const heatmapApartments = apartments.filter((apt) => recommendationScores[String(apt.id)] !== undefined);
+    if (heatmapApartments.length > 0) {
+      const heatmapTrace: Data = {
+        type: 'densitymapbox',
+        lat: heatmapApartments.map((apt) => apt.latitude),
+        lon: heatmapApartments.map((apt) => apt.longitude),
+        z: heatmapApartments.map((apt) => recommendationScores[String(apt.id)] * 100), // Scale for visibility
+        radius: 20,
+        colorscale: [
+          [0, 'rgba(59, 130, 246, 0)'],
+          [0.3, 'rgba(59, 130, 246, 0.3)'],
+          [0.5, 'rgba(147, 51, 234, 0.5)'],
+          [0.7, 'rgba(236, 72, 153, 0.6)'],
+          [1, 'rgba(239, 68, 68, 0.8)'],
+        ],
+        showscale: false,
+        hoverinfo: 'skip',
+        name: 'Recommendation Heatmap',
+      } as Data;
+      traces.push(heatmapTrace);
+    }
+  }
+
+  if (zoomLevel < 12 && clustersData && showClusters) {
+    // Show cluster centroids at low zoom (only if clusters are enabled)
     const clusterTrace: Data = {
       type: 'scattermapbox',
       mode: 'markers',
@@ -142,7 +188,7 @@ export const MapView = () => {
       center: zurichCenter,
       zoom: zoomLevel,
     },
-    height: 500,
+    height: isMapExpanded ? window.innerHeight - 100 : 500,
     margin: { t: 0, b: 0, l: 0, r: 0 },
     hovermode: 'closest',
     dragmode: 'select',
@@ -184,10 +230,33 @@ export const MapView = () => {
     }
   };
 
+  const handleRecenter = () => {
+    setZoomLevel(11);
+    // Force relayout by updating layout object
+  };
+
+  // If not expanded, show minimized button
+  if (!isMapExpanded) {
+    return (
+      <div className="map-minimized">
+        <button className="map-expand-button" onClick={toggleMapExpanded} title="Expand map">
+          <span className="map-icon">🗺️</span>
+          <span className="map-expand-text">Show Map</span>
+          <span className="expand-icon">⛶</span>
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="map-view">
+    <div className={`map-view ${isMapExpanded ? 'map-expanded' : ''}`}>
       <div className="map-header">
-        <h3>Apartment Map</h3>
+        <div className="map-title-section">
+          <h3>Apartment Map</h3>
+          <button className="map-collapse-button" onClick={toggleMapExpanded} title="Minimize map">
+            <span>✕</span>
+          </button>
+        </div>
         <div className="map-controls">
           {selectedClusterId !== null && (
             <div className="cluster-filter-badge">
@@ -201,6 +270,39 @@ export const MapView = () => {
                 ✕
               </button>
             </div>
+          )}
+
+          {brushedApartmentIds.length > 0 && (
+            <button
+              className="reset-selection-button"
+              onClick={clearBrushed}
+              title="Clear brushed selection"
+            >
+              <span className="reset-icon">🔄</span>
+              <span>Clear Selection ({brushedApartmentIds.length})</span>
+            </button>
+          )}
+
+          {isModelTrained && (
+            <label className="heatmap-toggle">
+              <input
+                type="checkbox"
+                checked={showHeatmap}
+                onChange={(e) => setShowHeatmap(e.target.checked)}
+              />
+              <span className="heatmap-label">Show Recommendations Heatmap</span>
+            </label>
+          )}
+
+          {zoomLevel < 12 && (
+            <label className="heatmap-toggle">
+              <input
+                type="checkbox"
+                checked={showClusters}
+                onChange={(e) => setShowClusters(e.target.checked)}
+              />
+              <span className="heatmap-label">Show Clusters</span>
+            </label>
           )}
           
           <label htmlFor="map-style-select" className="map-style-label">
@@ -251,6 +353,11 @@ export const MapView = () => {
             </button>
             <span className="zoom-indicator">{zoomLevel.toFixed(1)}</span>
           </div>
+
+          <button className="recenter-button" onClick={handleRecenter} title="Reset to Zurich center">
+            <span>📍</span>
+            <span>Recenter</span>
+          </button>
         </div>
       </div>
       <Plot

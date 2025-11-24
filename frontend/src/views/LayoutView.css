@@ -111,6 +111,16 @@
   background: #9ca3af;
 }
 
+/* Map overlay support - ensure content visible when map expands */
+.layout-view {
+  position: relative;
+}
+
+/* Prevent body scroll when map is expanded */
+body.map-expanded-active {
+  overflow: hidden;
+}
+
 /* Responsive adjustments for laptop screens */
 @media (max-width: 1600px) {
   .section-visualizations,

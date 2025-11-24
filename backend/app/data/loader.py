@@ -113,14 +113,19 @@ class DataStore:
         self.preprocess = preprocess
         self.numeric_columns = num_cols  # expose numeric columns for client-side selection
 
-    def get_apartment(self, apartment_id: int):
+    def get_apartment(self, apartment_id):
         # listings identified by 'id' column
+        # Accept both int and str to handle JS precision issues
         if "id" in self.df.columns:
             # compare as strings so very large numeric IDs still match
             row = self.df[self.df["id"] == str(apartment_id)]
             if len(row) == 0:
                 return None
-            return row.iloc[0].to_dict()
+            # Convert to dict and ensure ID is string
+            result = row.iloc[0].to_dict()
+            if 'id' in result:
+                result['id'] = str(result['id'])
+            return result
         return None
 
     def filter_df(self, filters: dict | None, apartment_ids: list[str] | None = None) -> pd.DataFrame:
@@ -178,7 +183,12 @@ class DataStore:
         df = self.filter_df(filters)
         total = len(df)
         page = df.iloc[offset : offset + limit]
-        return page.to_dict(orient="records"), total
+        # Convert to records and ensure IDs are strings
+        records = page.to_dict(orient="records")
+        for record in records:
+            if 'id' in record:
+                record['id'] = str(record['id'])
+        return records, total
 
 
 # instantiate singleton on import
