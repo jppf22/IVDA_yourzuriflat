@@ -79,7 +79,13 @@ export const useApartments = (params?: ApartmentsQueryParams) => {
       derived['apartment_ids'] = brushedApartmentIds;
     }
   }
-  const finalParams = params || (derived as ApartmentsQueryParams);
+  const finalParams: ApartmentsQueryParams = {
+    ...(derived as ApartmentsQueryParams),
+    ...(params || {}),
+  };
+  if (finalParams.limit === undefined) {
+    finalParams.limit = 2500; // load full dataset for global views (Map, PCA)
+  }
   const selectionSig = (brushedApartmentIds || []).join(',');
   const clusterSig = selectedClusterId !== null ? `cluster_${selectedClusterId}` : 'all';
   return useQuery<ApartmentsResponse>({
@@ -327,8 +333,7 @@ export const useRateMutation = () => {
       // Trigger background refetch without forcing immediate update
       queryClient.refetchQueries({ 
         predicate: (q) => isRecommendationsQuery(q.queryKey), 
-        type: 'active',
-        cancelRefetch: false 
+        type: 'active'
       });
     },
     onError: (error) => {
@@ -358,8 +363,7 @@ export const useRemoveRatingMutation = () => {
       // Trigger background refetch without forcing immediate update
       queryClient.refetchQueries({ 
         predicate: (q) => isRecommendationsQuery(q.queryKey), 
-        type: 'active',
-        cancelRefetch: false 
+        type: 'active'
       });
     },
     onError: (error) => {
