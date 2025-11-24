@@ -13,6 +13,7 @@ import { ApartmentDetailDrawer } from '../components/ApartmentDetailDrawer';
 import { FilterPanel } from '../components/FilterPanel';
 import { useAppStore } from '../store/useAppStore';
 import { useRateMutation, useRemoveRatingMutation } from '../api/hooks';
+import apiClient from '../api/client';
 import './LayoutView.css';
 
 export const LayoutView = () => {
@@ -20,6 +21,31 @@ export const LayoutView = () => {
 
   const rateMutation = useRateMutation();
   const removeRatingMutation = useRemoveRatingMutation();
+
+  // Sync persisted ratings with backend on mount
+  useEffect(() => {
+    const syncRatings = async () => {
+      const ratingEntries = Object.entries(userRatings);
+      if (ratingEntries.length === 0) return;
+
+      // Submit all persisted ratings to backend
+      try {
+        for (const [apartmentId, rating] of ratingEntries) {
+          await apiClient.post('/ratings', {
+            session_id: sessionId,
+            apartment_id: apartmentId,
+            rating,
+          });
+        }
+        // After syncing, the count should match
+        console.log(`Synced ${ratingEntries.length} ratings to backend`);
+      } catch (error) {
+        console.error('Failed to sync ratings with backend:', error);
+      }
+    };
+
+    syncRatings();
+  }, [sessionId]); // Only run once on mount with current sessionId
 
   const handleRate = (apartmentId: string, rating: number) => {
     // Update persisted store immediately

@@ -19,16 +19,21 @@ import './ExplainabilityView.css';
 export const ExplainabilityView = () => {
   const { sessionId, selectedApartmentIds, topRecommendations, ratingsCount } = useAppStore();
 
-  // Use selected apartments or top 3 recommendations
-  const apartmentIds:
-    | string[]
-    | undefined =
-    selectedApartmentIds.length > 0
-      ? selectedApartmentIds.slice(0, 3)
-      : topRecommendations.slice(0, 3).map((apt) => String(apt.id));
-
   // Check if model is ready (5+ ratings)
   const isModelReady = ratingsCount >= 5;
+
+  // Use selected apartments or top 3 recommendations
+  // Return undefined if no apartments available or model not ready
+  const apartmentIds: string[] | undefined = React.useMemo(() => {
+    if (!isModelReady) return undefined;
+    
+    if (selectedApartmentIds.length > 0) {
+      return selectedApartmentIds.slice(0, 3);
+    }
+    
+    const topIds = topRecommendations.slice(0, 3).map((apt) => String(apt.id));
+    return topIds.length > 0 ? topIds : undefined;
+  }, [selectedApartmentIds, topRecommendations, isModelReady]);
 
   const { data: explainabilityData, isLoading, isError, error, refetch } = useExplainability(
     sessionId,

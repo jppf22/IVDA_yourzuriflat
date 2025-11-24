@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAppStore } from '../store/useAppStore';
 import {
   useRecommendations,
@@ -11,12 +12,13 @@ import {
   useExplainability,
   useApartments,
 } from '../api/hooks';
+import apiClient from '../api/client';
 import { RatingControl } from '../components/RatingControl';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorMessage } from '../components/ErrorMessage';
 import { getColorForApartment, isTopRecommendation } from '../utils/colors';
 import { formatPrice, formatDistance, formatRoomType, formatNumber } from '../utils/formatting';
-import type { Recommendation, Apartment } from '../api/types';
+import type { Recommendation, Apartment, ApartmentsResponse } from '../api/types';
 import './RecommendedListView.css';
 
 const ITEMS_PER_PAGE = 20;
@@ -191,6 +193,25 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
     isError: isApartmentsError,
   } = useApartments(sortParams);
 
+  // Fetch rated apartments separately when on "rated" tab
+  // Use a separate query that bypasses global filters
+  const ratedApartmentIds = useMemo(() => Object.keys(currentRatings), [currentRatings]);
+  const shouldFetchRated = activeTab === 'rated' && ratedApartmentIds.length > 0;
+  
+  const {
+    data: ratedApartmentsData,
+    isLoading: isRatedApartmentsLoading,
+  } = useQuery<ApartmentsResponse>({
+    queryKey: ['ratedApartments', ratedApartmentIds],
+    queryFn: () => 
+      apiClient.get<ApartmentsResponse>('/apartments', {
+        apartment_ids: ratedApartmentIds,
+        limit: 2500,
+      }),
+    enabled: shouldFetchRated,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const recommendationsArray: Recommendation[] = useMemo(() => {
     if (!recommendationsData || !Array.isArray(recommendationsData.recommendations)) {
       return [];
@@ -245,13 +266,24 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
 
   const filteredRows = useMemo(() => {
     if (activeTab === 'rated') {
-      return rankingRows.filter((row) => currentRatings[String(row.apartment.id)] !== undefined);
+      // Use dedicated rated apartments query for consistent results
+      if (!ratedApartmentsData?.apartments) {
+        return [];
+      }
+      return ratedApartmentsData.apartments.map((apartment) => {
+        const metric = rankingOption.getMetricValue?.(apartment) ?? null;
+        return {
+          apartment,
+          metricValue: metric,
+          similarityScore: recommendationScoreMap.get(String(apartment.id)) ?? undefined,
+        };
+      });
     }
     if (activeTab === 'bookmarked') {
       return rankingRows.filter((row) => bookmarkedApartmentIds.includes(String(row.apartment.id)));
     }
     return rankingRows;
-  }, [rankingRows, activeTab, currentRatings, bookmarkedApartmentIds]);
+  }, [rankingRows, activeTab, ratedApartmentsData, bookmarkedApartmentIds, rankingOption, recommendationScoreMap]);
 
   const visibleRows = useMemo(() => {
     if (activeTab === 'all') {
@@ -518,6 +550,14 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
     return (
       <div className="recommended-list-view">
         <LoadingSpinner message="Loading apartments..." />
+      </div>
+    );
+  }
+
+  if (activeTab === 'rated' && isRatedApartmentsLoading) {
+    return (
+      <div className="recommended-list-view">
+        <LoadingSpinner message="Loading your rated apartments..." />
       </div>
     );
   }

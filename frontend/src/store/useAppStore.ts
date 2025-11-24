@@ -297,8 +297,14 @@ export const useAppStore = create<AppState>()(
         starAttributesVersion: state.starAttributesVersion,
       }),
       onRehydrateStorage: () => (state) => {
-        if (state && state.starAttributesVersion !== 1) {
-          // future migration logic placeholder
+        if (state) {
+          // Recalculate ratingsCount from userRatings to ensure sync
+          if (state.userRatings) {
+            state.ratingsCount = Object.keys(state.userRatings).length;
+          }
+          if (state.starAttributesVersion !== 1) {
+            // future migration logic placeholder
+          }
         }
       },
     }
