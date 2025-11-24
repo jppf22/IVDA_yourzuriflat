@@ -95,7 +95,7 @@ export const useApartmentDetail = (id: string) => {
 };
 
 // Recommendations based on user ratings
-export const useRecommendations = (sessionId: string, limit: number = 20) => {
+export const useRecommendations = (sessionId: string, limit: number = 20, ratingsCount?: number) => {
   const { filters, brushedApartmentIds } = useAppStore();
   const params: Record<string, unknown> = { session_id: sessionId, limit };
   const pushIf = (key: string, value: unknown) => {
@@ -134,10 +134,11 @@ export const useRecommendations = (sessionId: string, limit: number = 20) => {
 
   const selectionSig = (brushedApartmentIds || []).join(',');
   return useQuery<RecommendationsResponse>({
-    queryKey: ['recommendations', sessionId, limit, filterSig, selectionSig],
+    queryKey: ['recommendations', sessionId, limit, filterSig, selectionSig, ratingsCount],
     queryFn: () => apiClient.get<RecommendationsResponse>('/recommendations', params),
     enabled: !!sessionId,
     staleTime: 0,
+    refetchOnMount: 'always',
   });
 };
 

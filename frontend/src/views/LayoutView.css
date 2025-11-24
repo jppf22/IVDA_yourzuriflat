@@ -60,9 +60,9 @@
 }
 
 .section-recommended {
-  height: 400px;
+  height: 600px;
   overflow: hidden;
-  flex: 0 0 400px;
+  flex: 0 0 600px;
 }
 
 .section-visualizations {

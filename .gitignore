@@ -8,6 +8,7 @@
 
 # Project files
 project_files/
+docs/
 
 # System files
 .DS_Store
