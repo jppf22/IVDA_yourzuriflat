@@ -79,7 +79,9 @@ export const useApartments = (params?: ApartmentsQueryParams) => {
     pushIf('cluster_id', selectedClusterId);
   }
 
-  if (brushedApartmentIds && brushedApartmentIds.length > 0) {
+  // Only apply brushed filter if not explicitly ignored (for attribute rankings in list view)
+  const ignoreBrushedFilter = (params as any)?.ignoreBrushedFilter;
+  if (brushedApartmentIds && brushedApartmentIds.length > 0 && !ignoreBrushedFilter) {
     derived['apartment_ids'] = brushedApartmentIds;
   }
 
@@ -87,6 +89,10 @@ export const useApartments = (params?: ApartmentsQueryParams) => {
     ...(derived as ApartmentsQueryParams),
     ...(params || {}),
   };
+  // Remove the ignoreBrushedFilter flag from the actual API call
+  if ('ignoreBrushedFilter' in finalParams) {
+    delete (finalParams as any).ignoreBrushedFilter;
+  }
   if (finalParams.limit === undefined) {
     finalParams.limit = 2500; // load full dataset for global views (Map, PCA)
   }
@@ -171,7 +177,8 @@ export const useRecommendationsSubset = (sessionId: string, apartmentIds: string
       apartment_ids: apartmentIds,
     }),
     enabled: !!sessionId && apartmentIds.length > 0 && isModelTrained,
-    staleTime: 30000, // 30 seconds
+    staleTime: 5000, // 5 seconds - shorter to ensure fresh data on brushing
+    refetchOnMount: true,
   });
 };
 

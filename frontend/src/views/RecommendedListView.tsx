@@ -188,6 +188,9 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
         sort_by: rankingOption.sortBy,
         sort_order: rankingOption.sortOrder ?? 'asc',
         limit: 2500,
+        // Don't pass brushed IDs filter for attribute rankings - we want to show all apartments
+        // and just highlight the brushed ones
+        ignoreBrushedFilter: true,
       } as const;
     }
     return undefined;

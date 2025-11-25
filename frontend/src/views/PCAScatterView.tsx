@@ -366,8 +366,13 @@ export const PCAScatterView = () => {
     );
   }
 
-  const { points, x_label, y_label, mode } = pcaData as PCAResponse;
+  const { points, x_label, y_label, mode, explained_variance } = pcaData as PCAResponse;
   const scatterStyles = points.map((p: PCAPoint) => deriveMarkerStyle(p.apartment_id));
+  
+  // Calculate total explained variance if available
+  const totalVariance = explained_variance 
+    ? explained_variance.reduce((sum, val) => sum + val, 0) * 100
+    : null;
   const trace: Data = {
     type: 'scatter',
     mode: 'markers',
@@ -390,10 +395,10 @@ export const PCAScatterView = () => {
     customdata: points.map((p: PCAPoint) => p.apartment_id),
   };
   const layout: Partial<Layout> = {
-    xaxis: mode === 'raw' ? { title: { text: x_label } } : { title: { text: '' } },
-    yaxis: mode === 'raw' ? { title: { text: y_label } } : { title: { text: '' } },
-    height: 500,
-    margin: { t: 40, b: 60, l: 60, r: 40 },
+    xaxis: { title: { text: x_label || 'PC1' } },
+    yaxis: { title: { text: y_label || 'PC2' } },
+    height: 550,
+    margin: { t: 50, b: 100, l: 100, r: 40 },
     hovermode: 'closest',
     dragmode: 'select',
     showlegend: false,
@@ -420,6 +425,21 @@ export const PCAScatterView = () => {
     <div className="pca-scatter-view">
       <div className="scatter-header">
         <h3>Attribute Scatter / PCA</h3>
+        {mode === 'pca' && attributes.length > 2 && (
+          <div className="pca-info" style={{ 
+            fontSize: '0.9em', 
+            color: '#666', 
+            marginTop: '4px',
+            marginBottom: '8px'
+          }}>
+            <strong>Analyzing {attributes.length} attributes:</strong> {attributes.join(', ')}
+            {totalVariance !== null && (
+              <span style={{ marginLeft: '12px' }}>
+                (Variance explained: {totalVariance.toFixed(1)}%)
+              </span>
+            )}
+          </div>
+        )}
         <div className="scatter-controls">
           <AttributeMultiSelect
             candidates={dynamicCandidates}

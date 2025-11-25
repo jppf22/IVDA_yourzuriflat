@@ -133,8 +133,8 @@
   display: grid;
   grid-template-columns: 1fr;
   gap: 1rem;
-  height: 550px;
-  flex: 0 0 550px;
+  height: 650px;
+  flex: 0 0 650px;
 }
 
 .viz-panel {
