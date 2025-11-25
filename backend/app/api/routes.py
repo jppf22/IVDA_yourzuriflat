@@ -138,14 +138,15 @@ def get_apartments(
                     X_cluster = X_cluster.toarray()
                 if X_cluster.shape[1] > 0:
                     effective_clusters = min(5, df_for_clustering.shape[0])
-                    kmeans = KMeans(n_clusters=effective_clusters, random_state=0)
-                    labels = kmeans.fit_predict(X_cluster)
-                    # Get IDs for the requested cluster
-                    cluster_filtered_ids = [
-                        str(df_for_clustering.iloc[i]['id']) 
-                        for i, lab in enumerate(labels) 
-                        if int(lab) == cluster_id
-                    ]
+                    if effective_clusters > cluster_id:
+                        kmeans = KMeans(n_clusters=effective_clusters, random_state=0)
+                        labels = kmeans.fit_predict(X_cluster)
+                        # Get IDs for the requested cluster
+                        cluster_filtered_ids = [
+                            str(df_for_clustering.iloc[i]['id']) 
+                            for i, lab in enumerate(labels) 
+                            if int(lab) == cluster_id
+                        ]
         except Exception:
             pass
     
@@ -328,14 +329,15 @@ def get_recommendations(
                     X_cluster = X_cluster.toarray()
                 if X_cluster.shape[1] > 0:
                     effective_clusters = min(5, df_for_clustering.shape[0])
-                    kmeans = KMeans(n_clusters=effective_clusters, random_state=0)
-                    labels = kmeans.fit_predict(X_cluster)
-                    # Get IDs for the requested cluster
-                    cluster_filtered_ids = [
-                        str(df_for_clustering.iloc[i]['id']) 
-                        for i, lab in enumerate(labels) 
-                        if int(lab) == cluster_id
-                    ]
+                    if effective_clusters > cluster_id:
+                        kmeans = KMeans(n_clusters=effective_clusters, random_state=0)
+                        labels = kmeans.fit_predict(X_cluster)
+                        # Get IDs for the requested cluster
+                        cluster_filtered_ids = [
+                            str(df_for_clustering.iloc[i]['id']) 
+                            for i, lab in enumerate(labels) 
+                            if int(lab) == cluster_id
+                        ]
         except Exception:
             pass
     

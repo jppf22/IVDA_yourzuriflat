@@ -2,20 +2,30 @@
  * Formatting utilities for consistent data display
  */
 
-// Format price in CHF
-export const formatPrice = (price: number): string => {
-  return `CHF ${price.toFixed(0)}`;
+// Format price in CHF (handles string/undefined gracefully)
+export const formatPrice = (price: number | string | null | undefined): string => {
+  const numeric = typeof price === 'number' ? price : Number(price);
+  if (!Number.isFinite(numeric)) {
+    return 'CHF —';
+  }
+  return `CHF ${Math.round(numeric).toLocaleString('en-US')}`;
 };
 
-// Format distance in kilometers
-export const formatDistance = (distance: number): string => {
-  return `${distance.toFixed(2)} km`;
+// Format distance in kilometers (supports string inputs)
+export const formatDistance = (distance: number | string | null | undefined): string => {
+  const numeric = typeof distance === 'number' ? distance : Number(distance);
+  if (!Number.isFinite(numeric)) {
+    return '—';
+  }
+  return `${numeric.toFixed(2)} km`;
 };
 
 // Format number with comma separators
-export const formatNumber = (num: number | null | undefined): string => {
+export const formatNumber = (num: number | string | null | undefined): string => {
   if (num === null || num === undefined) return 'N/A';
-  return num.toLocaleString('en-US');
+  const numeric = typeof num === 'number' ? num : Number(num);
+  if (!Number.isFinite(numeric)) return 'N/A';
+  return numeric.toLocaleString('en-US');
 };
 
 // Format percentage
@@ -41,8 +51,9 @@ export const truncate = (text: string, maxLength: number): string => {
 };
 
 // Format room type for display
-export const formatRoomType = (roomType: string): string => {
-  return roomType
+export const formatRoomType = (roomType: string | null | undefined): string => {
+  const safe = roomType ? roomType : 'unknown';
+  return safe
     .split('_')
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');

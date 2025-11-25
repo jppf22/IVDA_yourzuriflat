@@ -232,7 +232,13 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
     if (!recommendationsData || !Array.isArray(recommendationsData.recommendations)) {
       return [];
     }
-    return recommendationsData.recommendations as Recommendation[];
+    return (recommendationsData.recommendations as Recommendation[]).map((rec) => {
+      const numericScore = Number(rec.predicted_score);
+      return {
+        apartment: rec.apartment,
+        predicted_score: Number.isFinite(numericScore) ? numericScore : 0,
+      };
+    });
   }, [recommendationsData]);
 
   const fallbackRecommendations: Recommendation[] = useMemo(() => {
@@ -249,12 +255,14 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
     const map = new Map<string, number>();
     // Add scores from main recommendations
     recommendationsArray.forEach((rec) => {
-      map.set(String(rec.apartment.id), rec.predicted_score);
+      const numericScore = Number(rec.predicted_score);
+      map.set(String(rec.apartment.id), Number.isFinite(numericScore) ? numericScore : 0);
     });
     // Add scores from rated apartments query (for My Ratings tab)
     if (ratedRecommendationsData?.recommendations) {
       ratedRecommendationsData.recommendations.forEach((rec: Recommendation) => {
-        map.set(String(rec.apartment.id), rec.predicted_score);
+        const numericScore = Number(rec.predicted_score);
+        map.set(String(rec.apartment.id), Number.isFinite(numericScore) ? numericScore : 0);
       });
     }
     return map;
@@ -263,19 +271,28 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
   const rankingRows: DisplayRow[] = useMemo(() => {
     if (isModelRanking) {
       const source = recommendationsArray.length > 0 ? recommendationsArray : fallbackRecommendations;
-      return source.map((rec) => ({
-        apartment: rec.apartment,
-        similarityScore: rec.predicted_score,
-        metricValue: rec.predicted_score,
-      }));
+      return source.map((rec) => {
+        const numericScore = Number(rec.predicted_score);
+        const safeScore = Number.isFinite(numericScore) ? numericScore : undefined;
+        return {
+          apartment: rec.apartment,
+          similarityScore: safeScore,
+          metricValue: safeScore,
+        };
+      });
     }
     const apartments = apartmentsData?.apartments ?? [];
     return apartments.map((apartment) => {
-      const metric = rankingOption.getMetricValue?.(apartment) ?? null;
+      const metricRaw = rankingOption.getMetricValue?.(apartment) ?? null;
+      const metricNumeric = typeof metricRaw === 'number' ? metricRaw : Number(metricRaw);
+      const metric = Number.isFinite(metricNumeric) ? metricNumeric : null;
+      const score = recommendationScoreMap.get(String(apartment.id));
+      const safeScore = score !== undefined ? Number(score) : undefined;
+      const normalizedScore = safeScore !== undefined && Number.isFinite(safeScore) ? safeScore : undefined;
       return {
         apartment,
         metricValue: metric,
-        similarityScore: recommendationScoreMap.get(String(apartment.id)) ?? undefined,
+        similarityScore: normalizedScore,
       };
     });
   }, [
@@ -294,11 +311,16 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
         return [];
       }
       return ratedApartmentsData.apartments.map((apartment) => {
-        const metric = rankingOption.getMetricValue?.(apartment) ?? null;
+        const metricRaw = rankingOption.getMetricValue?.(apartment) ?? null;
+        const metricNumeric = typeof metricRaw === 'number' ? metricRaw : Number(metricRaw);
+        const metric = Number.isFinite(metricNumeric) ? metricNumeric : null;
+        const score = recommendationScoreMap.get(String(apartment.id));
+        const safeScore = score !== undefined ? Number(score) : undefined;
+        const normalizedScore = safeScore !== undefined && Number.isFinite(safeScore) ? safeScore : undefined;
         return {
           apartment,
           metricValue: metric,
-          similarityScore: recommendationScoreMap.get(String(apartment.id)) ?? undefined,
+          similarityScore: normalizedScore,
         };
       });
     }
@@ -538,13 +560,28 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
   };
 
   const getTopContributions = (limit: number = 10) => {
-    if (!explainData || !explainData.contributions?.length) {
+    if (
+      !explainData ||
+      !Array.isArray(explainData.contributions) ||
+      explainData.contributions.length === 0 ||
+      !explainData.coefficients ||
+      !Array.isArray(explainData.coefficients.feature_names)
+    ) {
       return [];
     }
     const contribution = explainData.contributions[0];
+    if (!contribution || !Array.isArray(contribution.contributions)) {
+      return [];
+    }
     const features = explainData.coefficients.feature_names;
     return contribution.contributions
-      .map((value, index) => ({ feature: features[index], value }))
+      .map((value, index) => {
+        const numericValue = Number(value);
+        return {
+          feature: features[index] ?? `feature_${index + 1}`,
+          value: Number.isFinite(numericValue) ? numericValue : 0,
+        };
+      })
       .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
       .slice(0, limit);
   };
@@ -558,13 +595,21 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
 
   // Calculate color for selected apartment's similarity score
   const selectedScoreColor = useMemo(() => {
-    if (!selectedForExplain || !selectedRow || selectedScore === null) {
+    if (!selectedForExplain) {
       return '#e5e7eb'; // Default gray
     }
-    // Find the index in filteredRows to determine if it's a top recommendation
-    const indexInFiltered = filteredRows.findIndex((row) => String(row.apartment.id) === selectedForExplain);
-    return getScoreGradient(selectedScore, indexInFiltered);
-  }, [selectedForExplain, selectedRow, selectedScore, filteredRows, getScoreGradient]);
+    const row = filteredRows.find((item) => String(item.apartment.id) === selectedForExplain);
+    const fallbackScore = explainData?.contributions?.[0]?.predicted_score ?? null;
+    const resolvedScore = row?.similarityScore ?? fallbackScore;
+    if (resolvedScore === null || resolvedScore === undefined) {
+      return '#e5e7eb';
+    }
+    const indexInFiltered = filteredRows.findIndex((item) => String(item.apartment.id) === selectedForExplain);
+    if (indexInFiltered < 0) {
+      return '#e5e7eb';
+    }
+    return getScoreGradient(resolvedScore, indexInFiltered);
+  }, [selectedForExplain, filteredRows, explainData, getScoreGradient]);
 
   const formatMetricValue = (row: DisplayRow, apartment: Apartment) => {
     if (isModelRanking) {
@@ -769,22 +814,32 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
                       {apartment.beds}/{apartment.bedrooms}
                     </td>
                     <td className="col-reviews">
-                      {apartment.review_scores_rating !== undefined && apartment.review_scores_rating > 0 ? (
-                        <div className="review-info">
-                          <span className="review-rating" title="Average rating">
-                            ⭐ {apartment.review_scores_rating.toFixed(1)}
-                          </span>
-                          {apartment.number_of_reviews !== undefined && apartment.number_of_reviews > 0 && (
-                            <span className="review-count" title="Number of reviews">
-                              ({formatNumber(apartment.number_of_reviews)})
-                            </span>
-                          )}
-                        </div>
-                      ) : apartment.number_of_reviews !== undefined && apartment.number_of_reviews > 0 ? (
-                        <span className="review-count">{formatNumber(apartment.number_of_reviews)} reviews</span>
-                      ) : (
-                        <span className="no-reviews">No reviews</span>
-                      )}
+                      {(() => {
+                        const reviewScore = Number(apartment.review_scores_rating);
+                        const hasScore = Number.isFinite(reviewScore) && reviewScore > 0;
+                        const reviewsCount = Number(apartment.number_of_reviews);
+                        const hasCount = Number.isFinite(reviewsCount) && reviewsCount > 0;
+                        if (hasScore) {
+                          return (
+                            <div className="review-info">
+                              <span className="review-rating" title="Average rating">
+                                ⭐ {reviewScore.toFixed(1)}
+                              </span>
+                              {hasCount && (
+                                <span className="review-count" title="Number of reviews">
+                                  ({formatNumber(reviewsCount)})
+                                </span>
+                              )}
+                            </div>
+                          );
+                        }
+                        if (hasCount) {
+                          return (
+                            <span className="review-count">{formatNumber(reviewsCount)} reviews</span>
+                          );
+                        }
+                        return <span className="no-reviews">No reviews</span>;
+                      })()}
                     </td>
                     <td className={`col-score ${isModelRanking ? '' : 'attribute-score'}`}>
                       {isModelRanking ? (
