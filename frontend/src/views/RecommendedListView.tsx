@@ -401,17 +401,35 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
   ]);
 
   useEffect(() => {
-    if (selectedRankingId !== 'model' || recommendationsArray.length === 0) {
+    let source: Recommendation[] = recommendationsArray.length > 0 ? recommendationsArray : fallbackRecommendations;
+    if (brushedApartmentIds.length > 0) {
+      const filtered = source.filter((rec) => brushedApartmentIds.includes(String(rec.apartment.id)));
+      if (filtered.length > 0) {
+        source = filtered;
+      }
+    }
+    if (source.length === 0) {
+      if (topRecommendations.length !== 0) {
+        setTopRecommendations([]);
+      }
       return;
     }
-    const plannedTop = recommendationsArray.slice(0, 5).map((item) => item.apartment);
+    const plannedTop = source
+      .slice(0, 5)
+      .map((item) => ({ ...item.apartment, id: String(item.apartment.id) }));
     const changed =
       plannedTop.length !== topRecommendations.length ||
       plannedTop.some((apartment, index) => String(apartment.id) !== String(topRecommendations[index]?.id));
     if (changed) {
       setTopRecommendations(plannedTop);
     }
-  }, [selectedRankingId, recommendationsArray, topRecommendations, setTopRecommendations]);
+  }, [
+    recommendationsArray,
+    fallbackRecommendations,
+    brushedApartmentIds,
+    topRecommendations,
+    setTopRecommendations,
+  ]);
 
   useEffect(() => {
     setDisplayLimit(ITEMS_PER_PAGE);

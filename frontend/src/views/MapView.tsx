@@ -11,14 +11,19 @@ import { useAppStore } from '../store/useAppStore';
 import { useApartments, useClusters, useRecommendations, useRecommendationsSubset } from '../api/hooks';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorMessage } from '../components/ErrorMessage';
-import { getColorForApartment, getClusterColor, OPACITY } from '../utils/colors';
+import {
+  getColorForApartment,
+  getClusterColor,
+  OPACITY,
+  BRUSHED_COLOR,
+  SELECTION_COLOR,
+} from '../utils/colors';
 import { formatPrice, formatDistance, formatRoomType } from '../utils/formatting';
 import type { Data, Layout } from 'plotly.js';
 import './MapView.css';
 
 export const MapView = () => {
   const {
-    filters,
     topRecommendations,
     selectedApartmentIds,
     brushedApartmentIds,
@@ -66,6 +71,32 @@ export const MapView = () => {
   }, [isMapExpanded]);
 
   const topRecommendationIds = topRecommendations.map((apt) => String(apt.id));
+
+  // Preserve recommendation palette while highlighting selection/brushing via marker stroke
+  const deriveMarkerStyle = (apartmentId: string) => {
+    const id = String(apartmentId);
+    const baseColor = getColorForApartment(id, topRecommendationIds);
+    const isSelected = selectedApartmentIds.includes(id);
+    const isBrushed = brushedApartmentIds.includes(id);
+    const isTopRecommendation = topRecommendationIds.includes(id);
+
+    const color = baseColor;
+    const opacity = isSelected
+      ? OPACITY.selected
+      : isBrushed
+      ? OPACITY.brushed
+      : isTopRecommendation
+      ? OPACITY.normal
+      : OPACITY.dimmed;
+    const lineColor = isSelected
+      ? SELECTION_COLOR
+      : isBrushed
+      ? BRUSHED_COLOR
+      : 'rgba(0,0,0,0)';
+    const lineWidth = isSelected ? 3 : isBrushed ? 2 : 0;
+
+    return { color, opacity, lineColor, lineWidth };
+  };
 
   if (apartmentsLoading || clustersLoading) {
     return (
@@ -167,6 +198,8 @@ export const MapView = () => {
     traces.push(clusterTrace);
   } else {
     // Show individual apartments at high zoom
+    const markerStyles = apartments.map((apt) => deriveMarkerStyle(apt.id));
+
     const apartmentTrace: Data = {
       type: 'scattermapbox',
       mode: 'markers',
@@ -174,19 +207,12 @@ export const MapView = () => {
       lon: apartments.map((apt) => apt.longitude),
       marker: {
         size: 10,
-        color: apartments.map((apt) => {
-          const idStr = String(apt.id);
-          if (selectedApartmentIds.includes(idStr)) return '#f39c12';
-          if (brushedApartmentIds.includes(idStr)) return '#3498db';
-          return getColorForApartment(idStr, topRecommendationIds);
-        }),
-        opacity: apartments.map((apt) => {
-          const idStr = String(apt.id);
-          if (selectedApartmentIds.includes(idStr)) return OPACITY.selected;
-          if (brushedApartmentIds.includes(idStr)) return OPACITY.brushed;
-          if (topRecommendationIds.includes(idStr)) return OPACITY.normal;
-          return OPACITY.dimmed;
-        }),
+        color: markerStyles.map((style) => style.color),
+        opacity: markerStyles.map((style) => style.opacity),
+        line: {
+          color: markerStyles.map((style) => style.lineColor),
+          width: markerStyles.map((style) => style.lineWidth),
+        },
       },
       text: apartments.map(
         (apt) =>

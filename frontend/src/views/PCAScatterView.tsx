@@ -9,7 +9,11 @@ import { useAppStore } from '../store/useAppStore';
 import { usePCA, useApartments, useRecommendationsSubset } from '../api/hooks';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorMessage } from '../components/ErrorMessage';
-import { getColorForApartment, OPACITY } from '../utils/colors';
+import {
+  getColorForApartment,
+  OPACITY,
+  SELECTION_COLOR,
+} from '../utils/colors';
 import type { Data, Layout } from 'plotly.js';
 import type { PCAPoint, PCAResponse, Apartment } from '../api/types';
 import './PCAScatterView.css';
@@ -203,7 +207,29 @@ export const PCAScatterView = () => {
         apt: a as Apartment,
       }))
     : [];
-  const topRecommendationIds = topRecommendations.map(apt => apt.id);
+  const topRecommendationIds = topRecommendations.map(apt => String(apt.id));
+
+  // Preserve recommendation palette while highlighting selection/brushing via marker stroke
+  const deriveMarkerStyle = (apartmentId: string) => {
+    const id = String(apartmentId);
+    const baseColor = getColorForApartment(id, topRecommendationIds);
+    const isSelected = selectedApartmentIds.includes(id);
+    const isBrushed = brushedApartmentIds.includes(id);
+    const isTopRecommendation = topRecommendationIds.includes(id);
+
+    const color = baseColor;
+    const opacity = isSelected
+      ? OPACITY.selected
+      : isBrushed
+      ? OPACITY.brushed
+      : isTopRecommendation
+      ? OPACITY.normal
+      : OPACITY.dimmed;
+    const lineColor = isSelected ? SELECTION_COLOR : 'rgba(0,0,0,0)';
+    const lineWidth = isSelected ? 3 : 0;
+
+    return { color, opacity, lineColor, lineWidth };
+  };
 
   // 0 attributes selected: instruction state
   if (attributes.length === 0) {
@@ -236,6 +262,7 @@ export const PCAScatterView = () => {
 
   // Single attribute distribution mode
   if (attributes.length === 1 && singleAttr) {
+    const pointStyles = distPoints.map(p => deriveMarkerStyle(p.id));
     const trace: Data = {
       type: 'scatter',
       mode: 'markers',
@@ -243,17 +270,12 @@ export const PCAScatterView = () => {
       y: distPoints.map(p=>p.y),
       marker: {
         size: 9,
-        color: distPoints.map(p => {
-          if (selectedApartmentIds.includes(p.id)) return '#f39c12';
-          if (brushedApartmentIds.includes(p.id)) return '#3498db';
-          return getColorForApartment(p.id, topRecommendationIds);
-        }),
-        opacity: distPoints.map(p => {
-          if (selectedApartmentIds.includes(p.id)) return OPACITY.selected;
-          if (brushedApartmentIds.includes(p.id)) return OPACITY.brushed;
-          if (topRecommendationIds.includes(p.id)) return OPACITY.normal;
-          return OPACITY.dimmed;
-        }),
+        color: pointStyles.map(style => style.color),
+        opacity: pointStyles.map(style => style.opacity),
+        line: {
+          color: pointStyles.map(style => style.lineColor),
+          width: pointStyles.map(style => style.lineWidth),
+        },
       },
       text: distPoints.map(p => {
         const a = p.apt as Apartment;
@@ -345,6 +367,7 @@ export const PCAScatterView = () => {
   }
 
   const { points, x_label, y_label, mode } = pcaData as PCAResponse;
+  const scatterStyles = points.map((p: PCAPoint) => deriveMarkerStyle(p.apartment_id));
   const trace: Data = {
     type: 'scatter',
     mode: 'markers',
@@ -352,17 +375,12 @@ export const PCAScatterView = () => {
     y: points.map((p: PCAPoint) => p.y),
     marker: {
       size: 8,
-      color: points.map((p: PCAPoint) => {
-        if (selectedApartmentIds.includes(p.apartment_id)) return '#f39c12';
-        if (brushedApartmentIds.includes(p.apartment_id)) return '#3498db';
-        return getColorForApartment(p.apartment_id, topRecommendationIds);
-      }),
-      opacity: points.map((p: PCAPoint) => {
-        if (selectedApartmentIds.includes(p.apartment_id)) return OPACITY.selected;
-        if (brushedApartmentIds.includes(p.apartment_id)) return OPACITY.brushed;
-        if (topRecommendationIds.includes(p.apartment_id)) return OPACITY.normal;
-        return OPACITY.dimmed;
-      }),
+      color: scatterStyles.map(style => style.color),
+      opacity: scatterStyles.map(style => style.opacity),
+      line: {
+        color: scatterStyles.map(style => style.lineColor),
+        width: scatterStyles.map(style => style.lineWidth),
+      },
     },
     text: points.map((p: PCAPoint) => {
       const a = p.apartment;
