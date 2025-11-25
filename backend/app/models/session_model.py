@@ -111,6 +111,17 @@ class SessionModel:
             return True
         return False
 
+    def clear_ratings(self, session_id: str) -> int:
+        """Remove all ratings for a session and return how many entries were cleared."""
+        ratings = self.sessions.get(session_id)
+        if not ratings:
+            # Ensure session exists to avoid KeyError for downstream callers
+            self.sessions.setdefault(session_id, {})
+            return 0
+        removed_count = len(ratings)
+        self.sessions[session_id] = {}
+        return removed_count
+
     def get_ratings(self, session_id: str) -> Dict[str, float]:
         """Get all ratings for a session."""
         return self.sessions.get(session_id, {})

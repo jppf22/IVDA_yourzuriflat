@@ -11,6 +11,7 @@ import {
   useInitialSample,
   useExplainability,
   useApartments,
+  useClearRatingsMutation,
 } from '../api/hooks';
 import apiClient from '../api/client';
 import { RatingControl } from '../components/RatingControl';
@@ -129,6 +130,7 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
     sessionId,
     selectedApartmentIds,
     toggleApartmentSelection,
+    clearSelection,
     openDetailDrawer,
     topRecommendations,
     setTopRecommendations,
@@ -136,6 +138,9 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
     ratingsCount,
     bookmarkedApartmentIds,
     toggleBookmark,
+    clearBrushed,
+    clearAllRatings,
+    setRatingsCount,
     syncComplete,
   } = useAppStore();
 
@@ -215,7 +220,6 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
   // Fetch recommendations for rated apartments to get their similarity scores
   const {
     data: ratedRecommendationsData,
-    isLoading: isRatedRecommendationsLoading,
   } = useQuery<RecommendationsResponse>({
     queryKey: ['ratedRecommendations', sessionId, ratedApartmentIds.sort(), ratingsCount],
     queryFn: () =>
@@ -227,6 +231,45 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
     enabled: syncComplete && ratedApartmentIds.length > 0 && ratingsCount >= 5, // Only when model is trained
     staleTime: 30000,
   });
+
+  const clearRatingsMutation = useClearRatingsMutation();
+
+  const handleClearAllRatings = useCallback(() => {
+    if (ratingsCount === 0 || clearRatingsMutation.isPending) {
+      return;
+    }
+    const confirmed = window.confirm(
+      'This will remove all of your ratings and reset the recommendation model. Continue?' 
+    );
+    if (!confirmed) {
+      return;
+    }
+    clearRatingsMutation.mutate(
+      { session_id: sessionId },
+      {
+        onSuccess: (data) => {
+          clearAllRatings();
+          clearSelection();
+          clearBrushed();
+          setTopRecommendations([]);
+          setRatingsCount(data.ratings_count);
+          setSelectedForExplain(null);
+          setShowExplainability(false);
+        },
+      }
+    );
+  }, [
+    ratingsCount,
+    clearRatingsMutation,
+    sessionId,
+    clearAllRatings,
+    clearSelection,
+    clearBrushed,
+    setTopRecommendations,
+    setRatingsCount,
+    setSelectedForExplain,
+    setShowExplainability,
+  ]);
 
   const recommendationsArray: Recommendation[] = useMemo(() => {
     if (!recommendationsData || !Array.isArray(recommendationsData.recommendations)) {
@@ -527,6 +570,8 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
   }, [loadMoreItems]);
 
   const modelTrained = recommendationsData?.model_trained ?? false;
+  const canResetProfile = ratingsCount > 0;
+  const isResettingProfile = clearRatingsMutation.isPending;
 
   const scoreStats = useMemo(() => {
     if (!isModelRanking || filteredRows.length === 0) {
@@ -702,18 +747,32 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
       <div className="list-header">
         <div className="header-top">
           <h2>Recommended Apartments</h2>
-          {modelTrained && ratingsCount >= 5 && (
+          <div className="header-actions">
             <button
-              className="toggle-explain-button"
-              onClick={(event) => {
-                event.stopPropagation();
-                setShowExplainability((visible) => !visible);
-              }}
-              title={showExplainability ? 'Hide explainability panel' : 'Show explainability panel'}
+              className="reset-profile-button"
+              onClick={handleClearAllRatings}
+              disabled={!canResetProfile || isResettingProfile}
+              title={
+                canResetProfile
+                  ? 'Remove all ratings and restart your recommendation profile'
+                  : 'No ratings to clear yet'
+              }
             >
-              {showExplainability ? '📊 Hide Explainability' : '📊 Show Explainability'}
+              {isResettingProfile ? 'Resetting…' : 'Reset Ratings'}
             </button>
-          )}
+            {modelTrained && ratingsCount >= 5 && (
+              <button
+                className="toggle-explain-button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setShowExplainability((visible) => !visible);
+                }}
+                title={showExplainability ? 'Hide explainability panel' : 'Show explainability panel'}
+              >
+                {showExplainability ? '📊 Hide Explainability' : '📊 Show Explainability'}
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="tab-navigation">

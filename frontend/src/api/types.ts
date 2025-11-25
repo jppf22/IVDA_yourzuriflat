@@ -70,6 +70,7 @@ export interface RatingResponse {
   success: boolean;
   message: string;
   ratings_count: number;
+  removed_count?: number;
 }
 
 // Recommendations

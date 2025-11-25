@@ -207,6 +207,20 @@ def delete_rating(session_id: str = Query(...), apartment_id: str = Query(...)):
     return JSONResponse(content=_sanitize_for_json(encoded))
 
 
+@router.delete("/ratings/all")
+def delete_all_ratings(session_id: str = Query(...)):
+    removed_count = SESSION_MODEL.clear_ratings(session_id)
+    count = len(SESSION_MODEL.sessions.get(session_id, {}))
+    message = "All ratings cleared" if removed_count > 0 else "No ratings to clear"
+    encoded = jsonable_encoder({
+        "success": True,
+        "message": message,
+        "ratings_count": count,
+        "removed_count": removed_count,
+    })
+    return JSONResponse(content=_sanitize_for_json(encoded))
+
+
 @router.get("/ratings")
 def get_ratings(session_id: str = Query(...)):
     ratings = SESSION_MODEL.get_ratings(session_id)

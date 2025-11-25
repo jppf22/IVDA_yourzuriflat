@@ -391,6 +391,37 @@ export const useRemoveRatingMutation = () => {
   });
 };
 
+export const useClearRatingsMutation = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<RatingResponse, Error, { session_id: string }>({
+    mutationFn: ({ session_id }) =>
+      apiClient.delete<RatingResponse>(`/ratings/all?session_id=${session_id}`),
+    onSuccess: async (_data, variables) => {
+      const isRecommendationsQuery = (queryKey: unknown): boolean =>
+        Array.isArray(queryKey) && queryKey[0] === 'recommendations' && queryKey[1] === variables.session_id;
+
+      const isExplainabilityQuery = (queryKey: unknown): boolean =>
+        Array.isArray(queryKey) && queryKey[0] === 'explainability' && queryKey[1] === variables.session_id;
+
+      const isSubsetQuery = (queryKey: unknown): boolean =>
+        Array.isArray(queryKey) && queryKey[0] === 'recommendationsSubset' && queryKey[1] === variables.session_id;
+
+      await queryClient.invalidateQueries({ predicate: (q) => isRecommendationsQuery(q.queryKey) });
+      await queryClient.invalidateQueries({ predicate: (q) => isExplainabilityQuery(q.queryKey) });
+      await queryClient.invalidateQueries({ predicate: (q) => isSubsetQuery(q.queryKey) });
+
+      queryClient.refetchQueries({
+        predicate: (q) => isRecommendationsQuery(q.queryKey),
+        type: 'active',
+      });
+    },
+    onError: (error) => {
+      console.error('Clearing ratings failed:', error);
+    },
+  });
+};
+
 // Helper hook to get all necessary data for a view
 export const useApartmentData = (sessionId: string) => {
   const apartments = useApartments();
