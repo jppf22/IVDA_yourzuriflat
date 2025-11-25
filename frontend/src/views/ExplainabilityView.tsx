@@ -166,12 +166,29 @@ export const ExplainabilityView = () => {
     return [positiveTrace, negativeTrace];
   });
 
+  // Calculate x-axis range based on actual contribution values
+  const allContributions = traces.flatMap((trace) => (trace.x as number[]) || []);
+  const minContrib = Math.min(...allContributions, 0);
+  const maxContrib = Math.max(...allContributions, 0);
+  const xRange = Math.max(Math.abs(minContrib), Math.abs(maxContrib));
+  const xAxisRange: [number, number] = [-xRange * 1.1, xRange * 1.1];
+
   const layout: Partial<Layout> = {
     barmode: 'relative',
     height: 500,
-    margin: { t: 40, b: 60, l: 200, r: 40 },
-    xaxis: { title: { text: 'Contribution to Predicted Score' }, zeroline: true },
-    yaxis: { title: { text: 'Feature' } },
+    margin: { t: 40, b: 60, l: 280, r: 40 },
+    xaxis: { 
+      title: { text: 'Contribution to Predicted Score' }, 
+      zeroline: true,
+      range: xAxisRange,
+      tickformat: '.2f'
+    },
+    yaxis: { 
+      title: { 
+        text: 'Feature',
+        standoff: 20
+      } 
+    },
     showlegend: true,
   };
 
