@@ -16,6 +16,7 @@ import type {
   RecommendationsSubsetResponse,
   PCAResponse,
   ExplainabilityResponse,
+  SnapshotsResponse,
   ClustersResponse,
   InitialSampleResponse,
   FilterOptionsResponse,
@@ -248,6 +249,19 @@ export const useExplainability = (sessionId: string, apartmentIds?: string[], mo
       }),
     enabled: !!sessionId && apartmentIds !== undefined && apartmentIds.length > 0 && isModelReady && syncComplete,
     staleTime: 0,
+  });
+};
+
+// Model snapshots for before/after comparison
+export const useSnapshots = (sessionId: string, enabled: boolean = true) => {
+  return useQuery<SnapshotsResponse>({
+    queryKey: ['snapshots', sessionId],
+    queryFn: () =>
+      apiClient.get<SnapshotsResponse>('/snapshots', {
+        session_id: sessionId,
+      }),
+    enabled: !!sessionId && enabled,
+    staleTime: 30000, // 30 seconds
   });
 };
 

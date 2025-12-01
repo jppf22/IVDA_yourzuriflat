@@ -279,6 +279,7 @@ export const useAppStore = create<AppState>()(
       property_type: ['property_types'],
       neighbourhood_cleansed: ['neighbourhoods'],
       neighbourhood_group_cleansed: ['neighbourhood_groups'],
+      amenities: ['amenities'],
     };
     const clearKeys = [
       ...(numericMap[field] || []),

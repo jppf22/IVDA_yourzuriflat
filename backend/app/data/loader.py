@@ -243,6 +243,13 @@ class DataStore:
             colg = 'neighbourhood_group_cleansed' if 'neighbourhood_group_cleansed' in df.columns else 'neighbourhood_group'
             if colg in df.columns:
                 df = df[df[colg].isin(filters['neighbourhood_groups'])]
+        # Amenity filtering - filter by binary amenity columns (amenity_WiFi, amenity_Kitchen, etc.)
+        if 'amenities' in filters and filters['amenities']:
+            for amenity in filters['amenities']:
+                amenity_col = f'amenity_{amenity}'
+                if amenity_col in df.columns:
+                    # Filter to apartments that have this amenity (value == 1)
+                    df = df[df[amenity_col] == 1]
         return df
 
     def sort_df(self, df: pd.DataFrame, sort_by: Optional[str], sort_order: Optional[str]) -> pd.DataFrame:

@@ -140,10 +140,9 @@ export const StarComparisonView = () => {
       r: [...vals, vals[0]],
       theta: [...attributes, attributes[0]],
       name: apt.name ? apt.name.substring(0, 30) : String(apt.id),
-      fill: 'toself',
-      line: { color },
-      fillcolor: color,
-      opacity: 0.35,
+      fill: 'none',
+      line: { color, width: 2 },
+      opacity: 0.8,
       // attach apartment id so click can open detail
       customdata: Array(vals.length + 1).fill(String(apt.id)),
       hovertemplate: `<b>${apt.name ? apt.name.replace(/`/g,'') : apt.id}</b><br>` +

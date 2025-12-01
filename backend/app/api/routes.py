@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Path
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
@@ -59,6 +59,7 @@ class FilterOptionsResponse(BaseModel):
     property_types: List[str] = []
     neighbourhoods: List[str] = []
     neighbourhood_groups: List[str] = []
+    amenities: List[str] = []
 
 
 class RatingRequest(BaseModel):
@@ -92,6 +93,7 @@ def get_apartments(
     property_types: Optional[List[str]] = Query(None),
     neighbourhoods: Optional[List[str]] = Query(None),
     neighbourhood_groups: Optional[List[str]] = Query(None),
+    amenities: Optional[List[str]] = Query(None),
     page: int = 1,
     limit: int = 50,
     sort_by: Optional[str] = Query(None),
@@ -122,6 +124,8 @@ def get_apartments(
         filters["neighbourhoods"] = neighbourhoods
     if neighbourhood_groups:
         filters["neighbourhood_groups"] = neighbourhood_groups
+    if amenities:
+        filters["amenities"] = amenities
     
     # Handle cluster filtering
     cluster_filtered_ids = None
@@ -530,6 +534,49 @@ def get_explainability(session_id: str = Query(...), apartment_ids: Optional[str
     return JSONResponse(content=_sanitize_for_json(encoded))
 
 
+@router.get("/snapshots")
+def get_snapshots(session_id: str = Query(...)):
+    """
+    Get all model snapshots for a session.
+    Returns snapshots captured at rating thresholds (1, 3, 5, 10, 15, 20).
+    """
+    snapshots = SESSION_MODEL.get_snapshots(session_id)
+    if not snapshots:
+        return {"snapshots": {}, "available_thresholds": []}
+    
+    # Convert to list format for easier frontend consumption
+    snapshot_list = []
+    for threshold, data in sorted(snapshots.items()):
+        snapshot_list.append({
+            "threshold": threshold,
+            "ratings_count": data["ratings_count"],
+            "timestamp": data["timestamp"],
+            "top_recommendations": data["top_recommendations"]
+        })
+    
+    payload = {
+        "snapshots": snapshot_list,
+        "available_thresholds": sorted(snapshots.keys())
+    }
+    return JSONResponse(content=_sanitize_for_json(payload))
+
+
+@router.get("/snapshots/{threshold}")
+def get_snapshot_at_threshold(session_id: str = Query(...), threshold: int = Path(...)):
+    """Get snapshot at a specific rating threshold."""
+    snapshot = SESSION_MODEL.get_snapshot_at_threshold(session_id, threshold)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail=f"No snapshot found at threshold {threshold}")
+    
+    payload = {
+        "threshold": threshold,
+        "ratings_count": snapshot["ratings_count"],
+        "timestamp": snapshot["timestamp"],
+        "top_recommendations": snapshot["top_recommendations"]
+    }
+    return JSONResponse(content=_sanitize_for_json(payload))
+
+
 @router.get("/clusters")
 def get_clusters(
     n_clusters: int = 5,
@@ -727,11 +774,22 @@ def filter_options():
     # Prefer cleansed columns if present
     neighbourhoods = uniq('neighbourhood_cleansed') or uniq('neighbourhood')
     neighbourhood_groups = uniq('neighbourhood_group_cleansed') or uniq('neighbourhood_group')
+    
+    # Extract amenity names from feature_names (columns starting with 'amenity_')
+    amenities = []
+    for col in df.columns:
+        if col.startswith('amenity_') and col != 'amenity_others':
+            # Remove 'amenity_' prefix to get the amenity name
+            amenity_name = col.replace('amenity_', '', 1)
+            amenities.append(amenity_name)
+    amenities = sorted(amenities)
+    
     payload = {
         'room_types': room_types,
         'property_types': property_types,
         'neighbourhoods': neighbourhoods,
         'neighbourhood_groups': neighbourhood_groups,
+        'amenities': amenities,
     }
     encoded = jsonable_encoder(payload)
     return JSONResponse(content=_sanitize_for_json(encoded))

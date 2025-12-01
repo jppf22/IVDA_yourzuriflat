@@ -1,6 +1,7 @@
 /**
  * Explainability View (T3 - Summarize model reasoning)
  * Bar chart showing feature contributions to predicted ratings
+ * Includes before/after model comparison toggle
  */
 
 import React from 'react';
@@ -8,7 +9,7 @@ import Plot from 'react-plotly.js';
 import type { AxiosError } from 'axios';
 import type { Apartment } from '../api/types';
 import { useAppStore } from '../store/useAppStore';
-import { useExplainability } from '../api/hooks';
+import { useExplainability, useSnapshots } from '../api/hooks';
 import apiClient from '../api/client';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorMessage } from '../components/ErrorMessage';
@@ -19,8 +20,15 @@ import './ExplainabilityView.css';
 export const ExplainabilityView = () => {
   const { sessionId, selectedApartmentIds, topRecommendations, ratingsCount } = useAppStore();
 
+  // State for before/after comparison
+  const [showComparison, setShowComparison] = React.useState(false);
+  const [selectedSnapshot, setSelectedSnapshot] = React.useState<number | null>(null);
+
   // Check if model is ready (5+ ratings)
   const isModelReady = ratingsCount >= 5;
+  
+  // Fetch snapshots for comparison
+  const { data: snapshotsData } = useSnapshots(sessionId, isModelReady && showComparison);
 
   // Use selected apartments or top 3 recommendations
   // Return undefined if no apartments available or model not ready
@@ -137,30 +145,51 @@ export const ExplainabilityView = () => {
   const traces: Data[] = explainabilityData.contributions.flatMap((entry) => {
     const apt = apartmentMap[String(entry.apartment_id)];
     const aptLabel = apt && apt.name ? `${apt.name.substring(0, 25)}` : `id:${entry.apartment_id}`;
-    const pairs = featureNames.map((fname, idx) => ({ feature_name: fname, contribution: entry.contributions[idx] || 0 }));
-    const positive = pairs.filter((c) => c.contribution > 0);
-    const negative = pairs.filter((c) => c.contribution < 0);
+    
+    // Get all contributions with feature names
+    const allPairs = featureNames.map((fname, idx) => ({ 
+      feature_name: fname, 
+      contribution: entry.contributions[idx] || 0 
+    }));
+    
+    // Sort by absolute contribution and take top 12
+    const sortedPairs = allPairs
+      .filter(p => Math.abs(p.contribution) > 0.001) // Filter out near-zero contributions
+      .sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
+      .slice(0, 12);
+    
+    // Split into positive and negative
+    const positive = sortedPairs.filter((c) => c.contribution > 0);
+    const negative = sortedPairs.filter((c) => c.contribution < 0);
 
     const positiveTrace: Data = {
       type: 'bar',
-      name: `${aptLabel} (+)`,
+      name: `${aptLabel} ✓`,
       x: positive.map((c) => c.contribution),
       y: positive.map((c) => c.feature_name),
       orientation: 'h',
-      marker: { color: CONTRIBUTION_COLORS.positive },
-      text: positive.map((c) => `+${c.contribution.toFixed(2)}`),
+      marker: { 
+        color: CONTRIBUTION_COLORS.positive,
+        line: { color: '#1e7e34', width: 1 }
+      },
+      text: positive.map((c) => `+${c.contribution.toFixed(3)}`),
       textposition: 'auto',
+      hovertemplate: '<b>%{y}</b><br>Contribution: +%{x:.3f}<br><extra></extra>',
     };
 
     const negativeTrace: Data = {
       type: 'bar',
-      name: `${aptLabel} (-)`,
+      name: `${aptLabel} ✗`,
       x: negative.map((c) => c.contribution),
       y: negative.map((c) => c.feature_name),
       orientation: 'h',
-      marker: { color: CONTRIBUTION_COLORS.negative },
-      text: negative.map((c) => c.contribution.toFixed(2)),
+      marker: { 
+        color: CONTRIBUTION_COLORS.negative,
+        line: { color: '#bd2130', width: 1 }
+      },
+      text: negative.map((c) => c.contribution.toFixed(3)),
       textposition: 'auto',
+      hovertemplate: '<b>%{y}</b><br>Contribution: %{x:.3f}<br><extra></extra>',
     };
 
     return [positiveTrace, negativeTrace];
@@ -192,20 +221,262 @@ export const ExplainabilityView = () => {
     showlegend: true,
   };
 
+  // Determine if comparison is available
+  const hasSnapshots = snapshotsData && snapshotsData.available_thresholds.length > 0;
+  const canCompare = ratingsCount > 5 && hasSnapshots;
+
   return (
     <div className="explainability-view">
       <div className="explainability-header">
-        <h3>Model Explanation</h3>
-        <p className="explainability-subtitle">
-          Feature contributions for {explainabilityData.contributions.length} apartment(s)
-        </p>
+        <h3>Model Reasoning</h3>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '8px' }}>
+          <p className="explainability-subtitle" style={{ margin: 0 }}>
+            Feature contributions for {explainabilityData.contributions.length} apartment(s)
+          </p>
+          {canCompare && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={showComparison}
+                  onChange={(e) => {
+                    setShowComparison(e.target.checked);
+                    if (!e.target.checked) setSelectedSnapshot(null);
+                  }}
+                />
+                <span style={{ fontSize: '0.9em', fontWeight: 500 }}>
+                  📊 Show Model Evolution
+                </span>
+              </label>
+            </div>
+          )}
+        </div>
       </div>
-      <Plot
-        data={traces}
-        layout={layout}
-        config={{ displayModeBar: true, displaylogo: false }}
-        style={{ width: '100%', height: '100%' }}
-      />
+      
+      {showComparison && hasSnapshots && (
+        <div style={{ 
+          padding: '12px', 
+          backgroundColor: '#f8f9fa', 
+          borderRadius: '6px', 
+          marginBottom: '12px',
+          border: '1px solid #dee2e6'
+        }}>
+          <div style={{ marginBottom: '8px', fontWeight: 600, color: '#495057' }}>
+            🕒 Compare with Earlier Model State:
+          </div>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setSelectedSnapshot(null)}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '4px',
+                border: selectedSnapshot === null ? '2px solid #007bff' : '1px solid #ced4da',
+                backgroundColor: selectedSnapshot === null ? '#e7f3ff' : 'white',
+                cursor: 'pointer',
+                fontWeight: selectedSnapshot === null ? 600 : 400,
+                fontSize: '0.85em'
+              }}
+            >
+              Current ({ratingsCount} ratings)
+            </button>
+            {snapshotsData.snapshots.map((snapshot) => (
+              <button
+                key={snapshot.threshold}
+                onClick={() => setSelectedSnapshot(snapshot.threshold)}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '4px',
+                  border: selectedSnapshot === snapshot.threshold ? '2px solid #007bff' : '1px solid #ced4da',
+                  backgroundColor: selectedSnapshot === snapshot.threshold ? '#e7f3ff' : 'white',
+                  cursor: 'pointer',
+                  fontWeight: selectedSnapshot === snapshot.threshold ? 600 : 400,
+                  fontSize: '0.85em'
+                }}
+              >
+                After {snapshot.ratings_count} rating{snapshot.ratings_count > 1 ? 's' : ''}
+              </button>
+            ))}
+          </div>
+          {selectedSnapshot !== null && (
+            <div style={{ 
+              marginTop: '12px', 
+              padding: '10px', 
+              backgroundColor: '#fff3cd', 
+              borderRadius: '4px',
+              fontSize: '0.85em',
+              color: '#856404'
+            }}>
+              <strong>ℹ️ Snapshot View:</strong> Showing top recommendations as they were after {selectedSnapshot} rating{selectedSnapshot > 1 ? 's' : ''}. 
+              Compare with current model to see how your preferences evolved.
+            </div>
+          )}
+        </div>
+      )}
+      
+      {selectedSnapshot !== null && hasSnapshots ? (
+        <SnapshotComparisonView 
+          sessionId={sessionId}
+          currentRatingsCount={ratingsCount}
+          snapshotThreshold={selectedSnapshot}
+          snapshotsData={snapshotsData}
+        />
+      ) : (
+        <>
+          <div style={{ 
+            padding: '12px', 
+            backgroundColor: '#e7f3ff', 
+            borderRadius: '6px', 
+            marginBottom: '12px',
+            border: '1px solid #bee5eb',
+            fontSize: '0.9em'
+          }}>
+            <strong>📊 How to Read This Chart:</strong>
+            <ul style={{ marginTop: '6px', marginBottom: '0', paddingLeft: '20px' }}>
+              <li><strong style={{ color: CONTRIBUTION_COLORS.positive }}>Green bars (✓)</strong> = Features that <em>increase</em> the recommendation score (aligned with your preferences)</li>
+              <li><strong style={{ color: CONTRIBUTION_COLORS.negative }}>Red bars (✗)</strong> = Features that <em>decrease</em> the score (misaligned with your preferences)</li>
+              <li>Longer bars = stronger influence on the recommendation</li>
+            </ul>
+          </div>
+          <Plot
+            data={traces}
+            layout={layout}
+            config={{ displayModeBar: true, displaylogo: false }}
+            style={{ width: '100%', height: '100%' }}
+          />
+        </>
+      )}
+    </div>
+  );
+};
+
+// Snapshot comparison component
+const SnapshotComparisonView = ({ 
+  sessionId, 
+  currentRatingsCount,
+  snapshotThreshold,
+  snapshotsData 
+}: { 
+  sessionId: string;
+  currentRatingsCount: number;
+  snapshotThreshold: number;
+  snapshotsData: any;
+}) => {
+  const [snapshotApartments, setSnapshotApartments] = React.useState<Record<string, Apartment | null>>({});
+  const [currentApartments, setCurrentApartments] = React.useState<Record<string, Apartment | null>>({});
+  
+  const snapshot = snapshotsData.snapshots.find((s: any) => s.threshold === snapshotThreshold);
+  const { topRecommendations } = useAppStore();
+  
+  // Fetch apartment details for snapshot
+  React.useEffect(() => {
+    if (!snapshot) return;
+    
+    const fetchApartments = async () => {
+      const snapshotIds = snapshot.top_recommendations.slice(0, 5).map((r: any) => r.apartment_id);
+      const currentIds = topRecommendations.slice(0, 5).map((apt) => String(apt.id));
+      
+      try {
+        const snapshotPairs = await Promise.all(
+          snapshotIds.map(async (id: string) => {
+            try {
+              const apt = await apiClient.get<Apartment>(`/apartments/${id}`);
+              return [id, apt] as const;
+            } catch {
+              return [id, null] as const;
+            }
+          })
+        );
+        
+        const currentPairs = await Promise.all(
+          currentIds.map(async (id: string) => {
+            try {
+              const apt = await apiClient.get<Apartment>(`/apartments/${id}`);
+              return [id, apt] as const;
+            } catch {
+              return [id, null] as const;
+            }
+          })
+        );
+        
+        setSnapshotApartments(Object.fromEntries(snapshotPairs));
+        setCurrentApartments(Object.fromEntries(currentPairs));
+      } catch (err) {
+        console.error('Error fetching apartments:', err);
+      }
+    };
+    
+    fetchApartments();
+  }, [snapshot, topRecommendations]);
+  
+  if (!snapshot) return <div>Snapshot not found</div>;
+  
+  const snapshotTop5 = snapshot.top_recommendations.slice(0, 5);
+  const currentTop5 = topRecommendations.slice(0, 5);
+  
+  return (
+    <div style={{ padding: '16px' }}>
+      <h4 style={{ marginTop: 0, marginBottom: '16px', color: '#495057' }}>
+        Top 5 Recommendations Comparison
+      </h4>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+        {/* Snapshot column */}
+        <div style={{ 
+          border: '2px solid #ffc107', 
+          borderRadius: '8px', 
+          padding: '12px',
+          backgroundColor: '#fffbf0'
+        }}>
+          <h5 style={{ marginTop: 0, color: '#856404' }}>
+            📸 After {snapshotThreshold} Rating{snapshotThreshold > 1 ? 's' : ''}
+          </h5>
+          <ol style={{ paddingLeft: '20px', margin: 0 }}>
+            {snapshotTop5.map((rec: any, idx: number) => {
+              const apt = snapshotApartments[rec.apartment_id];
+              return (
+                <li key={rec.apartment_id} style={{ marginBottom: '8px', fontSize: '0.9em' }}>
+                  {apt ? apt.name.substring(0, 40) : `ID: ${rec.apartment_id}`}
+                  <div style={{ fontSize: '0.85em', color: '#6c757d' }}>
+                    Score: {rec.score.toFixed(3)}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+        
+        {/* Current column */}
+        <div style={{ 
+          border: '2px solid #28a745', 
+          borderRadius: '8px', 
+          padding: '12px',
+          backgroundColor: '#f0fff4'
+        }}>
+          <h5 style={{ marginTop: 0, color: '#155724' }}>
+            🎯 Current ({currentRatingsCount} Ratings)
+          </h5>
+          <ol style={{ paddingLeft: '20px', margin: 0 }}>
+            {currentTop5.map((apt, idx) => (
+              <li key={apt.id} style={{ marginBottom: '8px', fontSize: '0.9em' }}>
+                {apt.name.substring(0, 40)}
+                <div style={{ fontSize: '0.85em', color: '#6c757d' }}>
+                  {/* Score not available in topRecommendations, just show name */}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </div>
+      <div style={{ 
+        marginTop: '16px', 
+        padding: '12px', 
+        backgroundColor: '#e7f3ff', 
+        borderRadius: '6px',
+        fontSize: '0.9em',
+        color: '#004085'
+      }}>
+        <strong>💡 Insight:</strong> As you rate more apartments, the model learns your preferences and refines recommendations. 
+        Compare the lists to see how your taste profile evolved!
+      </div>
     </div>
   );
 };

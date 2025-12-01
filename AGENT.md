@@ -308,13 +308,17 @@ Organize UI into clear, testable components. A possible breakdown:
 - Title: **"Model Reasoning"** or **"Why These Recommendations?"**
 - Horizontal bar chart showing **feature contributions** from content-based model:
   - Each feature's contribution = user_vector[j] * apartment_vector[j]
-  - Positive contributions (green) push recommendation higher
-  - Negative contributions (red) pull recommendation lower
-  - Top 12 most influential features displayed
-- **Before/After Model Comparison** (planned feature):
+  - Positive contributions (green ✓) push recommendation higher
+  - Negative contributions (red ✗) pull recommendation lower
+  - Top 12 most influential features displayed (sorted by absolute contribution)
+  - Enhanced visual design with bar borders and improved hover tooltips
+  - Explanation panel teaching users how to interpret the chart
+- **Before/After Model Comparison** (IMPLEMENTED):
   - Toggle to compare initial model (few ratings) vs calibrated model (5+ ratings)
-  - Show how recommendation ranking and feature weights evolved
-  - Side-by-side apartment lists or parallel bar charts
+  - Shows how recommendation ranking evolved as more ratings were collected
+  - Side-by-side apartment lists comparing snapshots at different rating thresholds
+  - Snapshots captured at 1, 3, 5, 10, 15, 20 ratings
+  - Visual indicators showing model evolution insights
 - Requires 5+ ratings; shows calibration progress ("X/5 ratings") until ready
 - Supports viewing contributions for:
   - Selected apartments (up to 3)
@@ -546,6 +550,33 @@ All endpoints in `backend/app/api/routes.py`. Example endpoints:
   }
   ```
 - Requires ≥5 ratings (returns 400 error if not met).
+
+**`GET /snapshots`**
+- Query params: `session_id`
+- Returns all model snapshots captured at rating thresholds:
+  ```json
+  {
+    "snapshots": [
+      {
+        "threshold": 5,
+        "ratings_count": 5,
+        "timestamp": 1234567890,
+        "top_recommendations": [
+          {"apartment_id": "123", "score": 0.87},
+          ...
+        ]
+      },
+      ...
+    ],
+    "available_thresholds": [1, 3, 5, 10, 15, 20]
+  }
+  ```
+- Used for before/after model comparison in ExplainabilityView.
+
+**`GET /snapshots/{threshold}`**
+- Path param: `threshold` (rating count: 1, 3, 5, 10, 15, or 20)
+- Query params: `session_id`
+- Returns snapshot at specific rating threshold or 404 if not found.
 
 **`GET /clusters`**
 - Returns K-means cluster assignments (5 clusters) for all apartments:
@@ -866,19 +897,20 @@ These features are planned or partially implemented. When working on them, align
 - Fullscreen map expansion
 - Domain-friendly titles ("Apartment Property Comparison" instead of "PCA")
 - Line traces in radar chart (consistent with design principles)
-
-**🚧 IN PROGRESS:**
+- **All individual apartment markers visible at all zoom levels** (no cluster polygons)
+- **PCA view with non-expert explanations** (explained variance with intuitive analogy)
 - **Before/After Model Comparison** (T3):
-  - Toggle in ExplainabilityView to compare initial model (few ratings) vs calibrated model (5+ ratings)
-  - Show how recommendation ranking evolved as more ratings were collected
-  - Display side-by-side apartment lists or parallel bar charts showing feature weight changes
-  - Implementation approach: Store snapshots of user vectors and recommendations at rating thresholds (1, 3, 5, 10 ratings)
+  - Snapshot storage at rating thresholds (1, 3, 5, 10, 15, 20)
+  - Toggle in ExplainabilityView to compare initial vs calibrated model
+  - Side-by-side comparison showing how recommendations evolved
+  - Backend endpoints: `GET /snapshots` and `GET /snapshots/{threshold}`
+- **Enhanced Explainability Visualization:**
+  - Top 12 most influential features sorted by absolute contribution
+  - Visual distinction with checkmarks (✓) and crosses (✗)
+  - Helpful explanation panel teaching users how to interpret the chart
+  - Improved bar chart styling with borders and better hover information
 
 **📋 PLANNED:**
-- **Enhanced Explainability Visualization:**
-  - Replace or supplement horizontal bar chart with more intuitive visualization for non-experts
-  - Consider: radar overlay showing user preference profile, feature alignment matrix, or interactive contribution explorer
-  - Goal: Make content-based model reasoning clearer without requiring ML knowledge
   
 - **Amenity-Based Recommendations:**
   - "Find similar apartments" feature based on amenity overlap

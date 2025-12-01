@@ -54,8 +54,8 @@ export const getClusterColor = (clusterId: number): string => {
 };
 
 // Selection and brushing colors
-export const SELECTION_COLOR = '#f39c12';
-export const BRUSHED_COLOR = '#3498db';
+export const SELECTION_COLOR = '#3498db'; // Blue for selection
+export const BRUSHED_COLOR = '#f39c12'; // Orange for brushed
 export const HOVER_COLOR = '#e67e22';
 
 // Opacity values

@@ -16,6 +16,9 @@ class SessionModel:
         # Feature weighting: emphasize location, amenities, and key apartment attributes
         self._feature_weights: Optional[np.ndarray] = None
         self._rating_counter = 0  # Simple counter for recency tracking
+        # Snapshots: session_id -> {threshold: {user_vector, top_recommendations, timestamp, ratings_count}}
+        self.snapshots: Dict[str, Dict[int, Dict[str, Any]]] = {}
+        self.snapshot_thresholds = [1, 3, 5, 10, 15, 20]  # Rating count thresholds
 
     def _build_id_index(self) -> Dict[str, int]:
         """Map apartment id (string) to row index in DATASTORE.X."""
@@ -198,6 +201,56 @@ class SessionModel:
             return None
         return user_vec / norm
 
+    def _capture_snapshot(self, session_id: str, ratings_count: int) -> None:
+        """
+        Capture a snapshot of the model state at a specific rating threshold.
+        
+        Stores:
+        - User preference vector
+        - Top 10 recommendation IDs and scores
+        - Timestamp
+        - Ratings count
+        """
+        import time
+        
+        user_vec = self._build_user_vector(session_id)
+        if user_vec is None:
+            return
+        
+        # Get top recommendations at this point
+        scores = self.predict_scores(session_id, apply_diversity_penalty=True)
+        if scores is None:
+            return
+        
+        # Get apartment IDs sorted by score
+        id_index = self._build_id_index()
+        reverse_index = {v: k for k, v in id_index.items()}
+        
+        top_indices = np.argsort(scores)[::-1][:10]
+        top_recommendations = [
+            {
+                'apartment_id': reverse_index.get(int(idx), str(idx)),
+                'score': float(scores[int(idx)])
+            }
+            for idx in top_indices
+        ]
+        
+        # Store snapshot
+        self.snapshots.setdefault(session_id, {})[ratings_count] = {
+            'user_vector': user_vec.tolist(),
+            'top_recommendations': top_recommendations,
+            'timestamp': int(time.time()),
+            'ratings_count': ratings_count
+        }
+
+    def get_snapshots(self, session_id: str) -> Dict[int, Dict[str, Any]]:
+        """Get all snapshots for a session."""
+        return self.snapshots.get(session_id, {})
+    
+    def get_snapshot_at_threshold(self, session_id: str, threshold: int) -> Optional[Dict[str, Any]]:
+        """Get snapshot at a specific rating threshold."""
+        return self.snapshots.get(session_id, {}).get(threshold)
+
     def add_rating(self, session_id: str, apartment_id: Union[int, str], rating: float) -> None:
         """Store rating for this session with timestamp (apartment_id normalized to string)."""
         self._rating_counter += 1
@@ -205,6 +258,11 @@ class SessionModel:
             'rating': float(rating),
             'timestamp': self._rating_counter
         }
+        
+        # Capture snapshot at specific rating thresholds
+        ratings_count = len(self.sessions[session_id])
+        if ratings_count in self.snapshot_thresholds:
+            self._capture_snapshot(session_id, ratings_count)
 
     def remove_rating(self, session_id: str, apartment_id: Union[int, str]) -> bool:
         """Remove rating for this session. Returns True if rating existed and was removed."""

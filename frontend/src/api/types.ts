@@ -165,6 +165,7 @@ export interface FilterOptionsResponse {
   property_types: string[];
   neighbourhoods: string[];
   neighbourhood_groups: string[];
+  amenities: string[]; // 47 amenity options (WiFi, Kitchen, Parking, etc.)
 }
 
 // Numeric field distribution for visualizing range sliders
@@ -210,6 +211,7 @@ export interface ApartmentFilters {
   // Extended categorical filters
   property_types?: string[];
   neighbourhood_groups?: string[];
+  amenities?: string[]; // Filter by specific amenities (WiFi, Kitchen, Parking, etc.)
 }
 
 // Query parameters for apartments endpoint
@@ -225,4 +227,22 @@ export interface ApartmentsResponse {
   total: number;
   page: number;
   limit: number;
+}
+
+// Snapshot data for before/after model comparison
+export interface SnapshotRecommendation {
+  apartment_id: string;
+  score: number;
+}
+
+export interface ModelSnapshot {
+  threshold: number;
+  ratings_count: number;
+  timestamp: number;
+  top_recommendations: SnapshotRecommendation[];
+}
+
+export interface SnapshotsResponse {
+  snapshots: ModelSnapshot[];
+  available_thresholds: number[];
 }

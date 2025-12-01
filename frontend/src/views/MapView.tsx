@@ -166,6 +166,7 @@ export const MapView = () => {
 
   if (zoomLevel < 12 && clustersData && showClusters) {
     // Show cluster centroids at low zoom (only if clusters are enabled)
+    // These are informational markers, not polygons - click to filter
     const clusterTrace: Data = {
       type: 'scattermapbox',
       mode: 'markers',
@@ -177,7 +178,7 @@ export const MapView = () => {
           selectedClusterId === c.cluster_id ? '#e74c3c' : getClusterColor(c.cluster_id)
         ),
         opacity: clustersData.centroids.map((c) => 
-          selectedClusterId === null || selectedClusterId === c.cluster_id ? 0.7 : 0.3
+          selectedClusterId === null || selectedClusterId === c.cluster_id ? 0.5 : 0.2
         ),
         line: {
           color: clustersData.centroids.map((c) => 
@@ -193,42 +194,42 @@ export const MapView = () => {
       ),
       hoverinfo: 'text',
       customdata: clustersData.centroids.map((c) => c.cluster_id),
-      name: 'Clusters',
+      name: 'Cluster Centers',
     };
     traces.push(clusterTrace);
-  } else {
-    // Show individual apartments at high zoom
-    const markerStyles = apartments.map((apt) => deriveMarkerStyle(apt.id));
-
-    const apartmentTrace: Data = {
-      type: 'scattermapbox',
-      mode: 'markers',
-      lat: apartments.map((apt) => apt.latitude),
-      lon: apartments.map((apt) => apt.longitude),
-      marker: {
-        size: 10,
-        color: markerStyles.map((style) => style.color),
-        opacity: markerStyles.map((style) => style.opacity),
-        line: {
-          color: markerStyles.map((style) => style.lineColor),
-          width: markerStyles.map((style) => style.lineWidth),
-        },
-      },
-      text: apartments.map(
-        (apt) =>
-          `<b>${apt.name}</b><br>` +
-          `${formatPrice(apt.price)}/night<br>` +
-          `${apt.property_type}<br>` +
-          `${formatRoomType(apt.room_type)}<br>` +
-          `Accommodates: ${apt.accommodates}<br>` +
-          `${formatDistance((apt.distance_from_city_center || apt.distance_from_center || 0))} from center`
-      ),
-      hoverinfo: 'text',
-      customdata: apartments.map((apt) => String(apt.id)),
-      name: 'Apartments',
-    };
-    traces.push(apartmentTrace);
   }
+  
+  // Always show individual apartments at all zoom levels (no clustering)
+  const markerStyles = apartments.map((apt) => deriveMarkerStyle(apt.id));
+
+  const apartmentTrace: Data = {
+    type: 'scattermapbox',
+    mode: 'markers',
+    lat: apartments.map((apt) => apt.latitude),
+    lon: apartments.map((apt) => apt.longitude),
+    marker: {
+      size: 10,
+      color: markerStyles.map((style) => style.color),
+      opacity: markerStyles.map((style) => style.opacity),
+      line: {
+        color: markerStyles.map((style) => style.lineColor),
+        width: markerStyles.map((style) => style.lineWidth),
+      },
+    },
+    text: apartments.map(
+      (apt) =>
+        `<b>${apt.name}</b><br>` +
+        `${formatPrice(apt.price)}/night<br>` +
+        `${apt.property_type}<br>` +
+        `${formatRoomType(apt.room_type)}<br>` +
+        `Accommodates: ${apt.accommodates}<br>` +
+        `${formatDistance((apt.distance_from_city_center || apt.distance_from_center || 0))} from center`
+    ),
+    hoverinfo: 'text',
+    customdata: apartments.map((apt) => String(apt.id)),
+    name: 'Apartments',
+  };
+  traces.push(apartmentTrace);
 
   const layout: Partial<Layout> = {
     mapbox: {
@@ -307,7 +308,7 @@ export const MapView = () => {
     >
       <div className="map-header">
         <div className="map-title-section">
-          <h3>Apartment Map</h3>
+          <h3>Explore Zurich Apartments</h3>
           {isMapExpanded && (
             <button className="map-collapse-button" onClick={toggleMapExpanded} title="Minimize map">
               <span>✕</span>
@@ -379,7 +380,7 @@ export const MapView = () => {
                 checked={showClusters}
                 onChange={(e) => setShowClusters(e.target.checked)}
               />
-              <span className="heatmap-label">Show Clusters</span>
+              <span className="heatmap-label">Show Cluster Centers</span>
             </label>
           )}
           

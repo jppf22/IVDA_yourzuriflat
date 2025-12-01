@@ -236,7 +236,7 @@ export const PCAScatterView = () => {
     return (
       <div className="pca-scatter-view">
         <div className="scatter-header">
-          <h3>Attribute Scatter / PCA</h3>
+          <h3>Apartment Property Comparison</h3>
           <div className="scatter-controls">
             <AttributeMultiSelect
               candidates={dynamicCandidates}
@@ -424,7 +424,7 @@ export const PCAScatterView = () => {
   return (
     <div className="pca-scatter-view">
       <div className="scatter-header">
-        <h3>Attribute Scatter / PCA</h3>
+        <h3>Apartment Property Comparison</h3>
         {mode === 'pca' && attributes.length > 2 && (
           <div className="pca-info" style={{ 
             fontSize: '0.9em', 
@@ -434,10 +434,25 @@ export const PCAScatterView = () => {
           }}>
             <strong>Analyzing {attributes.length} attributes:</strong> {attributes.join(', ')}
             {totalVariance !== null && (
-              <span style={{ marginLeft: '12px' }}>
-                (Variance explained: {totalVariance.toFixed(1)}%)
-              </span>
+              <div style={{ marginTop: '4px' }}>
+                <span style={{ fontWeight: 'bold', color: '#2c3e50' }}>
+                  📊 Information retained: {totalVariance.toFixed(1)}%
+                </span>
+                <span style={{ marginLeft: '8px', fontSize: '0.85em', color: '#7f8c8d', fontStyle: 'italic' }}>
+                  (Like taking a photo of a 3D object - captures the main patterns while simplifying the view)
+                </span>
+              </div>
             )}
+          </div>
+        )}
+        {mode === 'raw' && attributes.length === 2 && (
+          <div className="pca-info" style={{ 
+            fontSize: '0.9em', 
+            color: '#666', 
+            marginTop: '4px',
+            marginBottom: '8px'
+          }}>
+            <strong>Direct comparison:</strong> {attributes[0]} vs {attributes[1]}
           </div>
         )}
         <div className="scatter-controls">

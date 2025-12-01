@@ -54,6 +54,7 @@ export const FilterPanel = ({ collapsed: initialCollapsed = false }: FilterPanel
     property_type: { label: 'Property Type', options: filterOpts?.property_types || [] },
     neighbourhood_cleansed: { label: 'Neighbourhood', options: filterOpts?.neighbourhoods || [] },
     neighbourhood_group_cleansed: { label: 'Neighbourhood Group', options: filterOpts?.neighbourhood_groups || [] },
+    amenities: { label: 'Amenities', options: filterOpts?.amenities || [] },
   };
 
   const candidateFields = useMemo(() => {
@@ -128,6 +129,7 @@ export const FilterPanel = ({ collapsed: initialCollapsed = false }: FilterPanel
                 property_type: 'property_types',
                 neighbourhood_cleansed: 'neighbourhoods',
                 neighbourhood_group_cleansed: 'neighbourhood_groups',
+                amenities: 'amenities',
               };
               const storeKey = keyMap[field];
               const currentValues = (filters as any)[storeKey] || [];
