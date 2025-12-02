@@ -169,7 +169,7 @@ export const ApartmentDetailDrawer = ({
                   <div className="info-card-content">
                     <div className="info-card-label">Capacity</div>
                     <div className="info-card-value">{apartment.accommodates} guests</div>
-                    <div className="info-card-sublabel">{apartment.bedrooms} bed · {apartment.beds} beds · {apartment.bathrooms} bath</div>
+                    <div className="info-card-sublabel">{apartment.beds} bed{apartment.beds !== 1 ? 's' : ''} · {apartment.bedrooms} bedroom{apartment.bedrooms !== 1 ? 's' : ''} · {apartment.bathrooms} bath</div>
                   </div>
                 </div>
                 <div className="info-card">

@@ -105,8 +105,12 @@ Enable browsing and filtering independent of the model's recommendations:
 
 **T6 – Relate apartment attributes**  
 Visualize correlations and structure in feature space using:
-- **"Apartment Property Comparison"** view (replaces technical "PCA" terminology for non-experts)
-- 2D scatter plot: raw attribute pairs (2 attrs) or dimensionality reduction (>2 attrs)
+- **"Apartment Property Comparison"** view (replaces technical "UMAP" terminology for non-experts)
+- 2D scatter plot: raw attribute pairs (2 attrs) or UMAP dimensionality reduction (>2 attrs)
+- **UMAP + LDA topic modeling**: Non-linear mapping with semantic clustering
+  - Human-readable topic labels (e.g., "Entire Home & Zurich", "Budget & Solo Couple")
+  - Dual color modes: Topic (semantic clusters) vs Recommendation (model-based)
+  - Topic legend with keywords explaining each cluster
 - Multi-attribute selection with filtering and search
 - Brushing/lasso selection to highlight apartments across views
 - Optional outlier filtering to focus on typical apartments
@@ -129,11 +133,13 @@ Visualize correlations and structure in feature space using:
 - Exposes RESTful JSON APIs for data access, model updates, and analytics.
 - Holds the entire dataset in memory (2348 apartments × ~200 features) and maintains session-specific user preference vectors.
 - **No database required** – sessions stored in-memory dict (clears on restart).
+- **Dimensionality reduction**: UMAP + LDA topic modeling for semantic clustering.
+- **Key dependencies**: fastapi, uvicorn, pandas, numpy, scikit-learn, umap-learn, gensim
 
 **Communication**
 - Frontend ↔ Backend via HTTP + JSON.
 - APIs documented via FastAPI auto-generated OpenAPI docs at `/docs`.
-- **Single-file architecture:** All routes in `backend/app/api/routes.py` (826 lines).
+- **Single-file architecture:** All routes in `backend/app/api/routes.py`.
 - Pydantic models defined inline in routes file (no separate schemas directory).
 
 ### 3.2 Actual Directory Structure
@@ -183,6 +189,10 @@ The project uses the following structure:
     listings_clean.json # Preprocessed (2348 apartments)
   /docs
     QUICKSTART.md
+    EXPLAINABILITY_INTEGRATION.md
+    MODEL_ENHANCEMENTS.md
+    UMAP_IMPLEMENTATION.md
+    UMAP_QUICKSTART.md
     frontend/
       FRONTEND_IMPLEMENTATION.md
 ```
@@ -520,16 +530,25 @@ All endpoints in `backend/app/api/routes.py`. Example endpoints:
 - Returns scores only for specified apartments (used for brushed selections).
 
 **`GET /pca`**
+- Legacy endpoint - redirects to `/umap` for backward compatibility
 - Query params: `attributes` (comma-separated), `mode` (raw/pca), `filter_outliers` (bool), all apartment filters
+- Returns same format as `/umap` endpoint
+
+**`GET /umap`**
+- Query params: `attributes` (comma-separated), `n_topics` (default 5, range 2-10), `remove_outliers` (bool), `session_id`, all apartment filters
 - Returns:
   ```json
   {
-    "points": [{"apartment_id": str, "x": float, "y": float, "name": str, ...}, ...],
-    "mode": "raw" | "pca",
-    "attributes": ["attr1", "attr2"],
-    "explained_variance": [0.45, 0.32]  // only in PCA mode
+    "points": [{"apartment_id": str, "x": float, "y": float, "topic_id": int, "topic_label": str, "name": str, ...}, ...],
+    "topics": [{"topic_id": int, "label": str, "keywords": [str, ...]}, ...],
+    "mode": "raw" | "umap",
+    "x_label": str,
+    "y_label": str
   }
   ```
+- **Raw mode** (2 attributes): Direct X/Y scatter plot
+- **UMAP mode** (3+ attributes): Non-linear dimensionality reduction with LDA topic modeling
+- Requires minimum 10 points for UMAP
 
 **`GET /explainability`**
 - Query params: `session_id`, `apartment_ids` (list, max 3)
@@ -632,7 +651,64 @@ On each `GET /recommendations`:
 - Return sorted list with scores
 - Optional cluster filtering applied before scoring
 
-### 5.5 Testing
+### 5.5 UMAP + Topic Modeling
+
+**Location:** `backend/app/api/routes.py` (functions: `get_umap()`, `_compute_umap_projection()`)
+
+**Purpose:** Non-linear dimensionality reduction with semantic clustering for "Apartment Property Comparison" view (T6).
+
+**Implementation:**
+- **UMAP (Uniform Manifold Approximation and Projection)**:
+  - Non-linear dimensionality reduction preserving local and global structure
+  - Configuration: `n_components=2, n_neighbors=15, min_dist=0.1, metric='euclidean', random_state=42`
+  - Requires minimum 10 data points to function
+  - Better than PCA for preserving similarity relationships in non-linear data
+
+- **LDA Topic Modeling (Latent Dirichlet Allocation)**:
+  - Discovers semantic clusters in apartment data
+  - Each apartment becomes a "document" with tokens from:
+    - Property type, room type, neighbourhood
+    - Top 10 amenities per apartment
+    - Price buckets (budget/moderate/upscale/luxury)
+    - Capacity buckets (solo_couple/small_group/large_group)
+  - Configuration: `num_topics=5` (default, configurable 2-10), `passes=10`, `random_state=42`
+  - Generates human-readable topic labels from top keywords (e.g., "Entire Home & Zurich")
+
+**API Endpoint:**
+```
+GET /umap?attributes=price,distance_from_city_center,bedrooms&n_topics=5&remove_outliers=false&session_id=X
+```
+
+**Response format:**
+```json
+{
+  "points": [
+    {"apartment_id": "123", "x": 1.23, "y": -0.45, "topic_id": 0, "topic_label": "Entire Home & Zurich", ...}
+  ],
+  "topics": [
+    {"topic_id": 0, "label": "Entire Home & Zurich", "keywords": ["entire_home_apt", "city_zurich", "wifi"]}
+  ],
+  "x_label": "UMAP Dimension 1",
+  "y_label": "UMAP Dimension 2",
+  "mode": "umap"
+}
+```
+
+**Frontend integration:**
+- `UMAPScatterView.tsx` - Main visualization component (replaced PCAScatterView in LayoutView)
+- Dual color modes: Topic (semantic) vs Recommendation (model-based)
+- Topic legend showing all discovered topics with keywords
+- Backward compatibility: `/pca` endpoint redirects to `/umap`
+- PCAScatterView.tsx kept for reference but not used in active layout
+
+**Design rationale:**
+- **Non-expert friendly**: Topic labels more intuitive than principal components
+- **Semantic clustering**: Similar apartments naturally group together
+- **Flexible exploration**: Users can see both semantic structure (topics) and personalized relevance (recommendations)
+
+**See also:** `docs/UMAP_IMPLEMENTATION.md`, `docs/UMAP_QUICKSTART.md`
+
+### 5.6 Testing
 
 - Use **pytest** for backend tests.
 - Test categories:
@@ -688,6 +764,22 @@ On each `GET /recommendations`:
 - **Feature weighting:** Emphasizes important attributes
   - Location features (distance, lat, lon): 2.0x weight
   - Amenity features (WiFi, Kitchen, etc.): 1.5x weight
+  - Key apartment attributes (beds, bathrooms, bedrooms, accommodates, room_type): 1.3x weight
+  - Other features: 1.0x baseline
+- **User vector construction:**
+  - Liked apartments (rating ≥ 4.0): Weighted centroid with recency boost (up to 1.2x for recent ratings)
+  - Disliked apartments (rating ≤1.0): Dampened subtraction (0.5x factor, ALPHA=0.5)
+  - Normalize to unit vector
+- **Diversity penalty:** Reduces scores for apartments too similar to already-rated ones (0.7x-1.0x penalty)
+- **Scoring:** Feature-weighted cosine similarity between user vector and all apartment vectors
+- **No regression model** - purely similarity-based
+- **See:** `backend/app/models/session_model.py`, `docs/MODEL_ENHANCEMENTS.md`
+
+**UMAP + LDA topic modeling** for dimensionality reduction:
+- **UMAP:** Non-linear projection preserving local structure (better than PCA for semantic clustering)
+- **LDA:** Topic modeling for human-readable semantic labels
+- **Use case:** "Apartment Property Comparison" view (T6) with 3+ attributes
+- **See:** `docs/UMAP_IMPLEMENTATION.md`, `docs/UMAP_QUICKSTART.md`
   - Key attributes (beds, bathrooms, accommodates, room_type): 1.3x weight
   - Other features: 1.0x baseline
 - **User vector:** Weighted centroid of liked items with enhancements
@@ -815,7 +907,7 @@ From `/backend`:
 **Install dependencies:**
 ```bash
 conda activate IVDA_GROUP
-pip install -r requirements.txt
+pip install -r requirements.txt  # installs: fastapi, uvicorn, pandas, numpy, scikit-learn, umap-learn, gensim
 ```
 
 **Run FastAPI backend with Uvicorn:**

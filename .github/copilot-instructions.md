@@ -12,6 +12,7 @@ Interactive Visual Data Analysis (IVDA) tool for Zurich apartment rentals. **Con
 - **Multi-view coordination**: Linked brushing via `selectedApartmentIds` and `brushedApartmentIds` in Zustand
 - **Color encoding**: Top 5 recommendations get consistent colors across views (see `utils/colors.ts`)
 - **Persistence**: `bookmarkedApartmentIds` and user session state persist via Zustand middleware
+- **Dimensionality reduction**: UMAP (non-linear) with LDA topic modeling for semantic clustering
 
 ### Backend: Python + FastAPI
 **Location**: `backend/`
@@ -20,8 +21,12 @@ Interactive Visual Data Analysis (IVDA) tool for Zurich apartment rentals. **Con
   - User vector = weighted centroid of liked apartments (rating ≥ 4.0) with recency boost
   - Diversity penalty encourages variety in recommendations
   - Recommendations ranked by feature-weighted cosine similarity
+- **Dimensionality reduction**: UMAP + LDA topic modeling for semantic apartment clustering
+  - Topics labeled with human-readable names (e.g., "Entire Home & Zurich", "Budget & Solo Couple")
+  - Dual color modes: topic-based and recommendation-based
 - **Data**: In-memory pandas DataFrame (2348 apartments × ~200 features after encoding)
 - **Session management**: In-memory dict with timestamps - no database, clears on restart
+- **Dependencies**: fastapi, pandas, numpy, scikit-learn, umap-learn, gensim
 
 ### Critical Data Flow
 1. User rates apartment → Frontend calls `POST /ratings` → `SESSION_MODEL.add_rating()` (stores with timestamp)
@@ -99,12 +104,15 @@ npm test
 
 ## Key Files to Read First
 1. **`backend/Notebooks/ExploratoryAnalysis.ipynb`** - Data cleaning & feature engineering (SOURCE OF TRUTH for preprocessing)
-2. **`backend/app/models/session_model.py`** - Enhanced content-based model with feature weighting, recency boost, diversity penalty (313 lines)
-3. **`backend/app/data/loader.py`** - Data preprocessing implementing notebook logic (287 lines)
-4. **`backend/app/api/routes.py`** - All API endpoints in single file (826 lines)
-5. **`frontend/src/store/useAppStore.ts`** - Global UI state with bookmarks, ratings, selections, amenity filters (327 lines)
-6. **`frontend/src/api/types.ts`** - Type contracts with backend (205 lines)
-7. **`AGENT.md`** - Comprehensive project guidelines (940 lines) - cross-reference with notebook for accuracy
+2. **`backend/app/models/session_model.py`** - Enhanced content-based model with feature weighting, recency boost, diversity penalty
+3. **`backend/app/data/loader.py`** - Data preprocessing implementing notebook logic
+4. **`backend/app/api/routes.py`** - All API endpoints including UMAP+LDA topic modeling (single file architecture)
+5. **`frontend/src/store/useAppStore.ts`** - Global UI state with bookmarks, ratings, selections, amenity filters
+6. **`frontend/src/api/types.ts`** - Type contracts with backend (includes TopicInfo interface)
+7. **`frontend/src/views/UMAPScatterView.tsx`** - UMAP visualization with topic modeling and dual color modes
+8. **`AGENT.md`** - Comprehensive project guidelines (986 lines) - cross-reference with notebook for accuracy
+9. **`docs/UMAP_IMPLEMENTATION.md`** - UMAP+LDA implementation details
+10. **`docs/MODEL_ENHANCEMENTS.md`** - Content-based model enhancement details
 
 ## Project-Specific Patterns
 
@@ -113,7 +121,11 @@ npm test
   - `LayoutView.tsx` - Main multi-view coordinator
   - `RecommendedListView.tsx` - T1/T4: **"Recommended Apartments"** with tabs (All/Ratings/Bookmarks) + integrated explainability panel + ranking options
   - `MapView.tsx` - T5: **"Explore Zurich Apartments"** - Plotly scattermapbox showing all individual listings (no cluster polygons)
-  - `PCAScatterView.tsx` - T6: **"Apartment Property Comparison"** - 2D scatter (raw attributes or PCA for dimensionality reduction)
+  - `UMAPScatterView.tsx` - T6: **"Apartment Property Comparison"** - UMAP with LDA topic modeling (replaces PCAScatterView)
+    - Two color modes: Topic (semantic clusters) and Recommendation (model-based)
+    - Topic legend with human-readable labels and keywords
+    - Supports raw 2D scatter (2 attrs) or UMAP projection (3+ attrs)
+  - `PCAScatterView.tsx` - Legacy view (kept for reference, not used in LayoutView)
   - `StarComparisonView.tsx` - T2: **"Apartment Comparison"** - Radar chart with line traces (not filled polygons) comparing up to 5 apartments
   - `ExplainabilityView.tsx` - T3: **"Model Reasoning"** - Bar charts showing feature contributions from content-based model
 - **Components** (`src/components/`) = reusable widgets
@@ -183,13 +195,16 @@ Enhanced content-based model using **feature-weighted cosine similarity**, not r
 8. **Farthest-point sampling** - cold-start uses PCA + greedy max-distance selection (see notebook)
 9. **Session persistence** - sessions are in-memory only; restarting backend clears all ratings
 10. **Model training threshold** - requires ≥5 ratings; frontend shows calibration message below this
-11. **Use domain-friendly names** - "Apartment Property Comparison" not "PCA Scatter", "Model Reasoning" not "Explainability"
+11. **Use domain-friendly names** - "Apartment Property Comparison" not "UMAP Scatter", "Model Reasoning" not "Explainability"
 12. **Map shows all listings** - no cluster polygons at low zoom; individual markers visible at all zoom levels
 13. **Radar chart uses line traces** - not filled polygons (for better visual clarity)
 14. **Color consistency critical** - avoid conflicting colors; top 5 recommendations use fixed palette (blue, orange, green, red, purple)
+15. **UMAP requires 10+ points** - backend returns empty array if fewer points; frontend handles gracefully
+16. **Topic modeling is non-deterministic** - LDA uses random_state=42 but may vary slightly; topics regenerated per request
+17. **PCA endpoint redirects to UMAP** - maintained for backward compatibility but uses UMAP+LDA internally
 
 ## API Endpoints Reference
-- `GET /apartments` - Paginated list with 20+ filter params (see `routes.py` line 70)
+- `GET /apartments` - Paginated list with 20+ filter params (see `routes.py`)
   - **Supports cluster filtering**: `?cluster_id=X` parameter to filter by K-means cluster
   - **Amenity search**: `?amenities=WiFi,Kitchen,Parking` to filter by specific amenities (47 options available)
   - **Filter params**: price_min/max, accommodates_min/max, bedrooms_min/max, bathrooms_min/max, beds_min/max, room_types, property_types, neighbourhoods, neighbourhood_groups, distance_from_city_center_max, etc.
@@ -199,10 +214,12 @@ Enhanced content-based model using **feature-weighted cosine similarity**, not r
 - `GET /ratings?session_id=X` - Get all ratings for a session
 - `GET /recommendations?session_id=X` - Top-N ranked by cosine similarity
   - **Supports cluster filtering**: `?cluster_id=X` parameter to filter recommendations by cluster
-- `GET /pca?attributes=X,Y&mode=raw|pca` - 2D projection for "Apartment Property Comparison" view
+- `GET /umap?attributes=X,Y,Z&n_topics=5` - UMAP projection with LDA topic modeling (primary endpoint)
   - **Raw mode** (2 attributes): Direct X/Y scatter plot
-  - **PCA mode** (>2 attributes): Dimensionality reduction to 2 components with explained variance
-  - **Non-expert explanation**: Like taking a photograph of a 3D sculpture - captures main shape while losing some depth
+  - **UMAP mode** (3+ attributes): Non-linear dimensionality reduction with semantic topic discovery
+  - **Topics**: LDA-based clustering with human-readable labels (e.g., "Entire Home & Zurich")
+  - **Non-expert explanation**: Non-linear mapping preserving local structure - similar apartments cluster together
+- `GET /pca?attributes=X,Y&mode=raw|pca` - Legacy endpoint, redirects to UMAP for backward compatibility
 - `GET /explainability?session_id=X&apartment_ids=Y` - Feature contributions (requires 5+ ratings)
 - `GET /clusters` - K-means clusters (5 clusters) for map view
 - `GET /initial-sample` - Farthest-first sample for cold-start calibration (5-8 diverse apartments)
@@ -270,43 +287,49 @@ pytest --cov=app tests/  # With coverage
 5. Test with backend running - frontend shows errors without API
 6. Update `docs/QUICKSTART.md` if workflow changes
 
-## Incomplete/Planned Features
+## Feature Status
 
 **✅ COMPLETED:**
-- Content-based recommendation system with cosine similarity
+- Content-based recommendation system with feature-weighted cosine similarity
+  - Feature weighting: location (2.0x), amenities (1.5x), key attributes (1.3x)
+  - Recency boost for recent ratings (up to 1.2x)
+  - Diversity penalty to encourage variety (0.7x-1.0x based on similarity)
+  - Dislike dampening (0.5x factor for ratings ≤1.0)
+- **UMAP + LDA Topic Modeling** for semantic apartment clustering
+  - Non-linear dimensionality reduction preserving local structure
+  - Automatic topic discovery with human-readable labels
+  - Dual color modes: Topic and Recommendation
+  - Topic legend with keywords explaining each cluster
 - **Amenity search and filtering** (47 amenity options: WiFi, Kitchen, Parking, Pet-friendly, Washer, etc.)
 - Integrated explainability panel in RecommendedListView
 - Tabbed view (All / My Ratings / Bookmarked)
 - Multi-ranking options (model-based + 5 attribute-based rankings)
 - Cluster filtering on map and recommendations
-- Rating management (add/remove ratings)
+- Rating management (add/remove ratings with timestamps)
 - Fullscreen map expansion
-- **Domain-friendly titles** ("Apartment Property Comparison" instead of "PCA")
+- **Domain-friendly titles** ("Apartment Property Comparison" instead of "PCA/UMAP")
 - **Line traces in radar chart** (not filled polygons)
 - **Map shows all listings** (no cluster polygons)
 
 **🚧 IN PROGRESS:**
-1. **Before/After Model Comparison** (T3):
-   - Toggle in ExplainabilityView to compare initial model (few ratings) vs calibrated model (5+ ratings)
-   - Show how recommendation ranking evolved as more ratings were collected
-   - Display side-by-side apartment lists or parallel bar charts showing feature weight changes
-   - Implementation: Store snapshots at rating thresholds (1, 3, 5, 10 ratings)
-
+- **Before/After Model Comparison** (T3):
+  - Toggle in ExplainabilityView to compare initial vs calibrated model
+  - Show how recommendations evolved with more ratings
+  - Snapshot storage at rating thresholds (1, 3, 5, 10, 15, 20)
 
 **📋 PLANNED:**
 - **Enhanced Explainability Visualization:**
-  - Replace or supplement horizontal bar chart with more intuitive visualization for non-experts
-  - Consider: radar overlay showing user preference profile, feature alignment matrix
-  - Goal: Make content-based model reasoning clearer without requiring ML knowledge
+  - More intuitive visualization for non-experts (radar overlay, feature alignment matrix)
+  - Goal: Make content-based model reasoning clearer without ML knowledge
 
 - **Amenity-Based Recommendations:**
-  - "Find similar apartments" feature based on amenity overlap
-  - Amenity importance weighting in user preference vector
+  - "Find similar apartments" based on amenity overlap
+  - Amenity importance learning per user
 
 - **Improved Cold-Start Experience:**
   - Explain WHY farthest-first sample was chosen (diversity visualization)
-  - Show calibration progress with visual feedback (confidence gauge)
-  - Progressive disclosure: unlock features as more ratings are collected
+  - Calibration progress with visual feedback (confidence gauge)
+  - Progressive disclosure: unlock features as more ratings collected
 
 ## Integration Points
 - **Frontend ↔ Backend**: REST JSON over HTTP, no WebSockets

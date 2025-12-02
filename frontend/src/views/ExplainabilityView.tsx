@@ -13,7 +13,7 @@ import { useExplainability, useSnapshots } from '../api/hooks';
 import apiClient from '../api/client';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorMessage } from '../components/ErrorMessage';
-import { CONTRIBUTION_COLORS } from '../utils/colors';
+import { CONTRIBUTION_COLORS, TOP_COLORS, getTopColor } from '../utils/colors';
 import type { Data, Layout } from 'plotly.js';
 import './ExplainabilityView.css';
 
@@ -23,6 +23,9 @@ export const ExplainabilityView = () => {
   // State for before/after comparison
   const [showComparison, setShowComparison] = React.useState(false);
   const [selectedSnapshot, setSelectedSnapshot] = React.useState<number | null>(null);
+  
+  // State for number of apartments to display
+  const [maxApartments, setMaxApartments] = React.useState(3);
 
   // Check if model is ready (5+ ratings)
   const isModelReady = ratingsCount >= 5;
@@ -30,18 +33,18 @@ export const ExplainabilityView = () => {
   // Fetch snapshots for comparison
   const { data: snapshotsData } = useSnapshots(sessionId, isModelReady && showComparison);
 
-  // Use selected apartments or top 3 recommendations
+  // Use selected apartments or top N recommendations based on maxApartments
   // Return undefined if no apartments available or model not ready
   const apartmentIds: string[] | undefined = React.useMemo(() => {
     if (!isModelReady) return undefined;
     
     if (selectedApartmentIds.length > 0) {
-      return selectedApartmentIds.slice(0, 3);
+      return selectedApartmentIds.slice(0, maxApartments);
     }
     
-    const topIds = topRecommendations.slice(0, 3).map((apt) => String(apt.id));
+    const topIds = topRecommendations.slice(0, maxApartments).map((apt) => String(apt.id));
     return topIds.length > 0 ? topIds : undefined;
-  }, [selectedApartmentIds, topRecommendations, isModelReady]);
+  }, [selectedApartmentIds, topRecommendations, isModelReady, maxApartments]);
 
   const { data: explainabilityData, isLoading, isError, error, refetch } = useExplainability(
     sessionId,
@@ -142,9 +145,14 @@ export const ExplainabilityView = () => {
 
   // Prepare bar chart data from numeric contributions and feature names
   const featureNames = explainabilityData.coefficients.feature_names;
-  const traces: Data[] = explainabilityData.contributions.flatMap((entry) => {
+  const topRecommendationIds = topRecommendations.map((apt) => apt.id);
+  
+  const traces: Data[] = explainabilityData.contributions.flatMap((entry, aptIndex) => {
     const apt = apartmentMap[String(entry.apartment_id)];
     const aptLabel = apt && apt.name ? `${apt.name.substring(0, 25)}` : `id:${entry.apartment_id}`;
+    
+    // Get color for this apartment based on its rank in recommendations
+    const apartmentColor = getTopColor(topRecommendationIds.indexOf(entry.apartment_id));
     
     // Get all contributions with feature names
     const allPairs = featureNames.map((fname, idx) => ({ 
@@ -164,32 +172,52 @@ export const ExplainabilityView = () => {
 
     const positiveTrace: Data = {
       type: 'bar',
-      name: `${aptLabel} ✓`,
+      name: `${aptLabel}`,
       x: positive.map((c) => c.contribution),
       y: positive.map((c) => c.feature_name),
       orientation: 'h',
       marker: { 
-        color: CONTRIBUTION_COLORS.positive,
-        line: { color: '#1e7e34', width: 1 }
+        color: apartmentColor,
+        opacity: 0.85,
+        line: { 
+          color: apartmentColor, 
+          width: 2 
+        },
+        pattern: {
+          shape: '',  // Solid fill for positive
+        }
       },
       text: positive.map((c) => `+${c.contribution.toFixed(3)}`),
       textposition: 'auto',
-      hovertemplate: '<b>%{y}</b><br>Contribution: +%{x:.3f}<br><extra></extra>',
+      hovertemplate: `<b>${aptLabel}</b><br>%{y}<br>Contribution: +%{x:.3f}<br><extra></extra>`,
+      legendgroup: `apt${aptIndex}`,
+      showlegend: true,
     };
 
     const negativeTrace: Data = {
       type: 'bar',
-      name: `${aptLabel} ✗`,
+      name: `${aptLabel} (negative)`,
       x: negative.map((c) => c.contribution),
       y: negative.map((c) => c.feature_name),
       orientation: 'h',
       marker: { 
-        color: CONTRIBUTION_COLORS.negative,
-        line: { color: '#bd2130', width: 1 }
+        color: apartmentColor,
+        opacity: 0.45,  // Lower opacity for negative contributions
+        line: { 
+          color: apartmentColor, 
+          width: 2,
+        },
+        pattern: {
+          shape: '/',  // Diagonal lines for negative
+          size: 4,
+          solidity: 0.3,
+        }
       },
       text: negative.map((c) => c.contribution.toFixed(3)),
       textposition: 'auto',
-      hovertemplate: '<b>%{y}</b><br>Contribution: %{x:.3f}<br><extra></extra>',
+      hovertemplate: `<b>${aptLabel}</b><br>%{y}<br>Contribution: %{x:.3f}<br><extra></extra>`,
+      legendgroup: `apt${aptIndex}`,
+      showlegend: false,  // Don't show negative in legend to reduce clutter
     };
 
     return [positiveTrace, negativeTrace];
@@ -202,21 +230,29 @@ export const ExplainabilityView = () => {
   const xRange = Math.max(Math.abs(minContrib), Math.abs(maxContrib));
   const xAxisRange: [number, number] = [-xRange * 1.1, xRange * 1.1];
 
+  // Count unique features to calculate dynamic height
+  const uniqueFeatures = new Set(traces.flatMap((trace) => (trace.y as string[]) || []));
+  const featureCount = uniqueFeatures.size;
+  // Dynamic height: 40px per feature + base margins (min 400px, max 900px)
+  const dynamicHeight = Math.max(400, Math.min(900, featureCount * 40 + 150));
+
   const layout: Partial<Layout> = {
     barmode: 'relative',
-    height: 500,
-    margin: { t: 40, b: 60, l: 280, r: 40 },
+    height: dynamicHeight,
+    margin: { t: 40, b: 60, l: 280, r: 120 },  // Increased right margin for long bars with labels
     xaxis: { 
       title: { text: 'Contribution to Predicted Score' }, 
       zeroline: true,
       range: xAxisRange,
-      tickformat: '.2f'
+      tickformat: '.2f',
+      automargin: true  // Auto-adjust margin for axis labels
     },
     yaxis: { 
       title: { 
         text: 'Feature',
         standoff: 20
-      } 
+      },
+      automargin: true  // Auto-adjust margin for long labels
     },
     showlegend: true,
   };
@@ -229,10 +265,36 @@ export const ExplainabilityView = () => {
     <div className="explainability-view">
       <div className="explainability-header">
         <h3>Model Reasoning</h3>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '8px', flexWrap: 'wrap' }}>
           <p className="explainability-subtitle" style={{ margin: 0 }}>
             Feature contributions for {explainabilityData.contributions.length} apartment(s)
           </p>
+          
+          {/* Apartment count selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label style={{ fontSize: '0.9em', fontWeight: 500, color: '#495057' }}>
+              Show:
+            </label>
+            <select
+              value={maxApartments}
+              onChange={(e) => setMaxApartments(Number(e.target.value))}
+              style={{
+                padding: '4px 8px',
+                borderRadius: '4px',
+                border: '1px solid #ced4da',
+                backgroundColor: 'white',
+                fontSize: '0.9em',
+                cursor: 'pointer',
+              }}
+            >
+              {[1, 2, 3, 4, 5].map((n) => (
+                <option key={n} value={n}>
+                  {n} apartment{n > 1 ? 's' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          
           {canCompare && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
@@ -321,7 +383,7 @@ export const ExplainabilityView = () => {
           snapshotsData={snapshotsData}
         />
       ) : (
-        <>
+        <div className="explainability-content">
           <div style={{ 
             padding: '12px', 
             backgroundColor: '#e7f3ff', 
@@ -332,18 +394,21 @@ export const ExplainabilityView = () => {
           }}>
             <strong>📊 How to Read This Chart:</strong>
             <ul style={{ marginTop: '6px', marginBottom: '0', paddingLeft: '20px' }}>
-              <li><strong style={{ color: CONTRIBUTION_COLORS.positive }}>Green bars (✓)</strong> = Features that <em>increase</em> the recommendation score (aligned with your preferences)</li>
-              <li><strong style={{ color: CONTRIBUTION_COLORS.negative }}>Red bars (✗)</strong> = Features that <em>decrease</em> the score (misaligned with your preferences)</li>
+              <li><strong>Solid bars</strong> = Features that <em>increase</em> the recommendation score (aligned with your preferences)</li>
+              <li><strong>Patterned bars (diagonal lines)</strong> = Features that <em>decrease</em> the score (misaligned with your preferences)</li>
+              <li>Each apartment uses its <strong>recommendation rank color</strong> (same as other views)</li>
               <li>Longer bars = stronger influence on the recommendation</li>
             </ul>
           </div>
-          <Plot
-            data={traces}
-            layout={layout}
-            config={{ displayModeBar: true, displaylogo: false }}
-            style={{ width: '100%', height: '100%' }}
-          />
-        </>
+          <div className="chart-container">
+            <Plot
+              data={traces}
+              layout={layout}
+              config={{ displayModeBar: true, displaylogo: false }}
+              style={{ width: '100%', height: '100%' }}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

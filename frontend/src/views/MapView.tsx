@@ -270,9 +270,26 @@ export const MapView = () => {
       const selectedIds = eventData.points.map((p) => p.customdata).filter(Boolean) as string[];
       setBrushedApartmentIds(selectedIds);
       
-      // Automatically open detail drawer when exactly one apartment is selected
-      if (selectedIds.length === 1) {
-        openDetailDrawer(selectedIds[0]);
+      // Automatically navigate to recommended list when apartments are selected
+      if (selectedIds.length > 0) {
+        // Collapse map if it's expanded
+        if (isMapExpanded) {
+          setMapExpanded(false);
+        }
+        
+        // Scroll to the recommended list section to show selected apartments
+        // Use setTimeout to ensure the map collapses first
+        setTimeout(() => {
+          const recommendedSection = document.querySelector('.section-recommended');
+          if (recommendedSection) {
+            recommendedSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }, 100);
+        
+        // If exactly one apartment, also open detail drawer
+        if (selectedIds.length === 1) {
+          openDetailDrawer(selectedIds[0]);
+        }
       }
     }
   };
