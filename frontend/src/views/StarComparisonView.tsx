@@ -67,12 +67,15 @@ function scale(values: number[], invert = false): number[] {
 
 export const StarComparisonView = () => {
   const { selectedApartmentIds, topRecommendations, starAttributes, toggleStarAttribute, resetStarAttributes, setStarAttributes, openDetailDrawer } = useAppStore();
+  
+  // User-controlled limit for displayed apartments (default: 3)
+  const [maxApartments, setMaxApartments] = useState(3);
 
-  // Use selected apartments or top recommendations
+  // Use selected apartments or top recommendations, limited by maxApartments
   const apartmentsToCompare =
     selectedApartmentIds.length > 0
-      ? topRecommendations.filter((apt) => selectedApartmentIds.includes(apt.id)).slice(0, 5)
-      : topRecommendations.slice(0, 5);
+      ? topRecommendations.filter((apt) => selectedApartmentIds.includes(apt.id)).slice(0, maxApartments)
+      : topRecommendations.slice(0, maxApartments);
 
   const topRecommendationIds = topRecommendations.map((apt) => apt.id);
 
@@ -186,8 +189,34 @@ export const StarComparisonView = () => {
   return (
     <div className="star-comparison-view">
       <div className="comparison-header">
-        <h3>Apartment Comparison</h3>
-        <p className="comparison-subtitle">Comparing {apartmentsToCompare.length} apartments</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h3>Apartment Comparison</h3>
+            <p className="comparison-subtitle">Comparing {apartmentsToCompare.length} apartments</p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <label htmlFor="max-apartments" style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+              Show:
+            </label>
+            <select
+              id="max-apartments"
+              value={maxApartments}
+              onChange={(e) => setMaxApartments(Number(e.target.value))}
+              style={{
+                padding: '0.25rem 0.5rem',
+                fontSize: '0.875rem',
+                border: '1px solid #d1d5db',
+                borderRadius: '4px',
+                background: 'white',
+                cursor: 'pointer',
+              }}
+            >
+              <option value={3}>3 apartments</option>
+              <option value={4}>4 apartments</option>
+              <option value={5}>5 apartments</option>
+            </select>
+          </div>
+        </div>
       </div>
       <div className="star-controls">
         <div className="star-controls-header">
