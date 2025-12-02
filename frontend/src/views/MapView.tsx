@@ -269,6 +269,11 @@ export const MapView = () => {
     if (eventData && eventData.points) {
       const selectedIds = eventData.points.map((p) => p.customdata).filter(Boolean) as string[];
       setBrushedApartmentIds(selectedIds);
+      
+      // Automatically open detail drawer when exactly one apartment is selected
+      if (selectedIds.length === 1) {
+        openDetailDrawer(selectedIds[0]);
+      }
     }
   };
 
