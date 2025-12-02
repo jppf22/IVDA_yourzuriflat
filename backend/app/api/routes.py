@@ -6,6 +6,7 @@ from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
 import math
 import numpy as np
+import pandas as pd
 import httpx
 from urllib.parse import urlparse
 
@@ -43,6 +44,10 @@ from app.models.session_model import SESSION_MODEL
 
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
+import umap
+from gensim import corpora
+from gensim.models import LdaModel
+from gensim.parsing.preprocessing import preprocess_string
 
 router = APIRouter()
 
@@ -306,6 +311,7 @@ def get_recommendations(
     property_types: Optional[List[str]] = Query(None),
     neighbourhoods: Optional[List[str]] = Query(None),
     neighbourhood_groups: Optional[List[str]] = Query(None),
+    amenities: Optional[List[str]] = Query(None),
 ):
     # Assemble filters dict
     filters = {}
@@ -331,6 +337,8 @@ def get_recommendations(
         filters["neighbourhoods"] = neighbourhoods
     if neighbourhood_groups:
         filters["neighbourhood_groups"] = neighbourhood_groups
+    if amenities:
+        filters["amenities"] = amenities
 
     # Handle cluster filtering
     cluster_filtered_ids = None
@@ -421,6 +429,326 @@ def get_recommendations(
     return JSONResponse(content=_sanitize_for_json(encoded))
 
 
+def _compute_umap_projection(
+    attributes: Optional[str],
+    filter_outliers: bool,
+    apartment_ids: Optional[List[str]],
+    price_min: Optional[float],
+    price_max: Optional[float],
+    accommodates_min: Optional[float],
+    accommodates_max: Optional[float],
+    bedrooms_min: Optional[float],
+    bedrooms_max: Optional[float],
+    bathrooms_min: Optional[float],
+    bathrooms_max: Optional[float],
+    beds_min: Optional[float],
+    beds_max: Optional[float],
+    minimum_nights_min: Optional[float],
+    minimum_nights_max: Optional[float],
+    maximum_nights_min: Optional[float],
+    maximum_nights_max: Optional[float],
+    distance_from_city_center_max: Optional[float],
+    number_of_reviews_min: Optional[float],
+    availability_365_min: Optional[float],
+    room_types: Optional[List[str]],
+    property_types: Optional[List[str]],
+    neighbourhoods: Optional[List[str]],
+    neighbourhood_groups: Optional[List[str]],
+    amenities: Optional[List[str]],
+    n_topics: int = 5,
+):
+    """
+    Helper function: UMAP dimensionality reduction with LDA topic modeling for interpretability.
+    Topics provide semantic clusters for non-domain experts.
+    """
+    # Parse attribute list (only keep numeric columns)
+    requested = [a.strip() for a in attributes.split(',')] if attributes else []
+    numeric_cols_available = set(getattr(DATASTORE, 'numeric_columns', []))
+    selected = [c for c in requested if c in numeric_cols_available]
+    
+    # Build filters dict (reuse semantics)
+    filters = {}
+    for name, val in [
+        ("price_min", price_min), ("price_max", price_max),
+        ("accommodates_min", accommodates_min), ("accommodates_max", accommodates_max),
+        ("bedrooms_min", bedrooms_min), ("bedrooms_max", bedrooms_max),
+        ("bathrooms_min", bathrooms_min), ("bathrooms_max", bathrooms_max),
+        ("beds_min", beds_min), ("beds_max", beds_max),
+        ("minimum_nights_min", minimum_nights_min), ("minimum_nights_max", minimum_nights_max),
+        ("maximum_nights_min", maximum_nights_min), ("maximum_nights_max", maximum_nights_max),
+        ("distance_from_city_center_max", distance_from_city_center_max),
+        ("number_of_reviews_min", number_of_reviews_min),
+        ("availability_365_min", availability_365_min),
+    ]:
+        if val is not None:
+            filters[name] = val
+    if room_types:
+        filters["room_types"] = room_types
+    if property_types:
+        filters["property_types"] = property_types
+    if neighbourhoods:
+        filters["neighbourhoods"] = neighbourhoods
+    if neighbourhood_groups:
+        filters["neighbourhood_groups"] = neighbourhood_groups
+    if amenities:
+        filters["amenities"] = amenities
+
+    df_filtered = DATASTORE.filter_df(filters, apartment_ids=apartment_ids)
+    if df_filtered.shape[0] == 0 or len(selected) < 2:
+        return {"points": [], "x_label": "", "y_label": "", "mode": "empty", "topics": []}
+
+    # Raw 2D scatter when exactly two attributes selected (keep existing behavior)
+    if len(selected) == 2:
+        a1, a2 = selected
+        # Optionally filter outliers if requested (simple IQR filter per axis)
+        plot_df = df_filtered[[a1, a2, 'id']].dropna()
+        if filter_outliers:
+            def _iqr_mask(s):
+                q1 = s.quantile(0.25)
+                q3 = s.quantile(0.75)
+                iqr = q3 - q1
+                return (s >= q1 - 1.5 * iqr) & (s <= q3 + 1.5 * iqr)
+            mask = _iqr_mask(plot_df[a1]) & _iqr_mask(plot_df[a2])
+            plot_df = plot_df[mask]
+        points = []
+        for _, row in plot_df.iterrows():
+            apt = df_filtered[df_filtered['id'] == row['id']].iloc[0]
+            points.append({
+                "apartment_id": str(row['id']), 
+                "x": float(row[a1]), 
+                "y": float(row[a2]), 
+                "apartment": _ensure_string_id(apt.to_dict()),
+                "topic_id": None,
+                "topic_label": None
+            })
+        payload = {"points": points, "x_label": a1, "y_label": a2, "mode": "raw", "topics": []}
+        return _sanitize_for_json(jsonable_encoder(payload))
+
+    # UMAP for >2 attributes
+    plot_df = df_filtered[selected + ['id']].dropna()
+    if plot_df.shape[0] < 10:  # Need minimum points for UMAP
+        return {"points": [], "x_label": "", "y_label": "", "mode": "umap", "topics": []}
+    
+    X_sub = plot_df[selected].to_numpy(dtype=float)
+    
+    # Standardization
+    X_sub = (X_sub - X_sub.mean(axis=0)) / (X_sub.std(axis=0) + 1e-9)
+    
+    # Apply UMAP dimensionality reduction
+    reducer = umap.UMAP(
+        n_components=2,
+        n_neighbors=min(15, len(X_sub) - 1),
+        min_dist=0.1,
+        metric='euclidean',
+        random_state=42
+    )
+    coords = reducer.fit_transform(X_sub)
+    
+    # Topic modeling using LDA on textual features
+    # Build text corpus from apartment attributes
+    text_corpus = []
+    for idx in plot_df.index:
+        apt_row = df_filtered[df_filtered['id'] == plot_df.loc[idx, 'id']].iloc[0]
+        
+        # Construct document from categorical and textual features
+        doc_tokens = []
+        
+        # Add property type
+        if 'property_type' in apt_row and pd.notna(apt_row['property_type']):
+            doc_tokens.append(str(apt_row['property_type']).lower().replace(' ', '_'))
+        
+        # Add room type
+        if 'room_type' in apt_row and pd.notna(apt_row['room_type']):
+            doc_tokens.append(str(apt_row['room_type']).lower().replace(' ', '_'))
+        
+        # Add neighbourhood
+        if 'neighbourhood' in apt_row and pd.notna(apt_row['neighbourhood']):
+            doc_tokens.append(str(apt_row['neighbourhood']).lower().replace(' ', '_').replace('-', '_'))
+        
+        # Parse amenities (stored as string)
+        if 'amenities' in apt_row and pd.notna(apt_row['amenities']):
+            amenities_str = str(apt_row['amenities'])
+            # Simple parsing of amenity list
+            amenities_str = amenities_str.strip('[]"')
+            amenities_list = [a.strip().strip('"').lower().replace(' ', '_') 
+                            for a in amenities_str.split(',') if a.strip()]
+            doc_tokens.extend(amenities_list[:10])  # Limit to top 10 amenities
+        
+        # Add price bucket
+        price = apt_row.get('price', 0)
+        if price < 100:
+            doc_tokens.append('budget')
+        elif price < 200:
+            doc_tokens.append('moderate')
+        elif price < 400:
+            doc_tokens.append('upscale')
+        else:
+            doc_tokens.append('luxury')
+        
+        # Add capacity bucket
+        accommodates = apt_row.get('accommodates', 0)
+        if accommodates <= 2:
+            doc_tokens.append('solo_couple')
+        elif accommodates <= 4:
+            doc_tokens.append('small_group')
+        else:
+            doc_tokens.append('large_group')
+        
+        text_corpus.append(doc_tokens)
+    
+    # Build dictionary and corpus for LDA
+    dictionary = corpora.Dictionary(text_corpus)
+    # Filter extremes to remove very rare and very common tokens
+    dictionary.filter_extremes(no_below=2, no_above=0.8, keep_n=100)
+    corpus = [dictionary.doc2bow(doc) for doc in text_corpus]
+    
+    # Train LDA model
+    if len(corpus) > 0 and len(dictionary) > 0:
+        lda_model = LdaModel(
+            corpus=corpus,
+            id2word=dictionary,
+            num_topics=n_topics,
+            random_state=42,
+            passes=10,
+            alpha='auto',
+            per_word_topics=True
+        )
+        
+        # Assign topics to apartments
+        topic_assignments = []
+        for doc_bow in corpus:
+            topic_dist = lda_model.get_document_topics(doc_bow)
+            if topic_dist:
+                # Get dominant topic
+                dominant_topic = max(topic_dist, key=lambda x: x[1])[0]
+            else:
+                dominant_topic = 0
+            topic_assignments.append(dominant_topic)
+        
+        # Extract topic keywords
+        topics_info = []
+        for topic_id in range(n_topics):
+            top_words = lda_model.show_topic(topic_id, topn=5)
+            keywords = [word for word, _ in top_words]
+            
+            # Generate human-readable topic label
+            label = _generate_topic_label(keywords)
+            
+            topics_info.append({
+                "topic_id": topic_id,
+                "label": label,
+                "keywords": keywords
+            })
+    else:
+        # Fallback if LDA fails
+        topic_assignments = [0] * len(plot_df)
+        topics_info = [{"topic_id": 0, "label": "General", "keywords": []}]
+    
+    # Build response points
+    points = []
+    for idx, row in enumerate(coords):
+        apt = df_filtered[df_filtered['id'] == plot_df.iloc[idx]['id']].iloc[0]
+        topic_id = int(topic_assignments[idx])
+        topic_label = next((t['label'] for t in topics_info if t['topic_id'] == topic_id), 'Unknown')
+        
+        points.append({
+            "apartment_id": str(plot_df.iloc[idx]['id']),
+            "x": float(row[0]),
+            "y": float(row[1]),
+            "apartment": _ensure_string_id(apt.to_dict()),
+            "topic_id": topic_id,
+            "topic_label": topic_label
+        })
+    
+    payload = {
+        "points": points,
+        "x_label": "UMAP Dimension 1",
+        "y_label": "UMAP Dimension 2",
+        "mode": "umap",
+        "topics": topics_info
+    }
+    return _sanitize_for_json(jsonable_encoder(payload))
+
+
+def _generate_topic_label(keywords):
+    """Generate human-readable label from topic keywords."""
+    # Simple heuristic: use first 2-3 most distinctive words
+    if not keywords:
+        return "General"
+    
+    # Look for patterns in keywords
+    label_parts = []
+    for word in keywords[:3]:
+        word_clean = word.replace('_', ' ').title()
+        label_parts.append(word_clean)
+    
+    return ' & '.join(label_parts[:2]) if len(label_parts) >= 2 else label_parts[0] if label_parts else "General"
+
+
+@router.get("/umap")
+def get_umap(
+    attributes: Optional[str] = Query(None),
+    filter_outliers: bool = Query(False),
+    apartment_ids: Optional[List[str]] = Query(None),
+    price_min: Optional[float] = Query(None),
+    price_max: Optional[float] = Query(None),
+    accommodates_min: Optional[float] = Query(None),
+    accommodates_max: Optional[float] = Query(None),
+    bedrooms_min: Optional[float] = Query(None),
+    bedrooms_max: Optional[float] = Query(None),
+    bathrooms_min: Optional[float] = Query(None),
+    bathrooms_max: Optional[float] = Query(None),
+    beds_min: Optional[float] = Query(None),
+    beds_max: Optional[float] = Query(None),
+    minimum_nights_min: Optional[float] = Query(None),
+    minimum_nights_max: Optional[float] = Query(None),
+    maximum_nights_min: Optional[float] = Query(None),
+    maximum_nights_max: Optional[float] = Query(None),
+    distance_from_city_center_max: Optional[float] = Query(None),
+    number_of_reviews_min: Optional[float] = Query(None),
+    availability_365_min: Optional[float] = Query(None),
+    room_types: Optional[List[str]] = Query(None),
+    property_types: Optional[List[str]] = Query(None),
+    neighbourhoods: Optional[List[str]] = Query(None),
+    neighbourhood_groups: Optional[List[str]] = Query(None),
+    amenities: Optional[List[str]] = Query(None),
+    n_topics: int = Query(5, ge=2, le=10),
+):
+    """
+    UMAP dimensionality reduction with LDA topic modeling for interpretability.
+    Topics provide semantic clusters for non-domain experts.
+    """
+    result = _compute_umap_projection(
+        attributes=attributes,
+        filter_outliers=filter_outliers,
+        apartment_ids=apartment_ids,
+        price_min=price_min,
+        price_max=price_max,
+        accommodates_min=accommodates_min,
+        accommodates_max=accommodates_max,
+        bedrooms_min=bedrooms_min,
+        bedrooms_max=bedrooms_max,
+        bathrooms_min=bathrooms_min,
+        bathrooms_max=bathrooms_max,
+        beds_min=beds_min,
+        beds_max=beds_max,
+        minimum_nights_min=minimum_nights_min,
+        minimum_nights_max=minimum_nights_max,
+        maximum_nights_min=maximum_nights_min,
+        maximum_nights_max=maximum_nights_max,
+        distance_from_city_center_max=distance_from_city_center_max,
+        number_of_reviews_min=number_of_reviews_min,
+        availability_365_min=availability_365_min,
+        room_types=room_types,
+        property_types=property_types,
+        neighbourhoods=neighbourhoods,
+        neighbourhood_groups=neighbourhood_groups,
+        amenities=amenities,
+        n_topics=n_topics,
+    )
+    return JSONResponse(content=result)
+
+
 @router.get("/pca")
 def get_pca(
     attributes: Optional[str] = Query(None),
@@ -447,75 +775,38 @@ def get_pca(
     property_types: Optional[List[str]] = Query(None),
     neighbourhoods: Optional[List[str]] = Query(None),
     neighbourhood_groups: Optional[List[str]] = Query(None),
+    amenities: Optional[List[str]] = Query(None),
 ):
-    # Parse attribute list (only keep numeric columns)
-    requested = [a.strip() for a in attributes.split(',')] if attributes else []
-    numeric_cols_available = set(getattr(DATASTORE, 'numeric_columns', []))
-    selected = [c for c in requested if c in numeric_cols_available]
-    # Build filters dict (reuse semantics)
-    filters = {}
-    for name, val in [
-        ("price_min", price_min), ("price_max", price_max),
-        ("accommodates_min", accommodates_min), ("accommodates_max", accommodates_max),
-        ("bedrooms_min", bedrooms_min), ("bedrooms_max", bedrooms_max),
-        ("bathrooms_min", bathrooms_min), ("bathrooms_max", bathrooms_max),
-        ("beds_min", beds_min), ("beds_max", beds_max),
-        ("minimum_nights_min", minimum_nights_min), ("minimum_nights_max", minimum_nights_max),
-        ("maximum_nights_min", maximum_nights_min), ("maximum_nights_max", maximum_nights_max),
-        ("distance_from_city_center_max", distance_from_city_center_max),
-        ("number_of_reviews_min", number_of_reviews_min),
-        ("availability_365_min", availability_365_min),
-    ]:
-        if val is not None:
-            filters[name] = val
-    if room_types:
-        filters["room_types"] = room_types
-    if property_types:
-        filters["property_types"] = property_types
-    if neighbourhoods:
-        filters["neighbourhoods"] = neighbourhoods
-    if neighbourhood_groups:
-        filters["neighbourhood_groups"] = neighbourhood_groups
-
-    df_filtered = DATASTORE.filter_df(filters, apartment_ids=apartment_ids)
-    if df_filtered.shape[0] == 0 or len(selected) < 2:
-        return {"points": [], "x_label": "", "y_label": "", "mode": "empty"}
-
-    # Raw 2D scatter when exactly two attributes selected
-    if len(selected) == 2:
-        a1, a2 = selected
-        # Optionally filter outliers if requested (simple IQR filter per axis)
-        plot_df = df_filtered[[a1, a2, 'id']].dropna()
-        if filter_outliers:
-            def _iqr_mask(s):
-                q1 = s.quantile(0.25)
-                q3 = s.quantile(0.75)
-                iqr = q3 - q1
-                return (s >= q1 - 1.5 * iqr) & (s <= q3 + 1.5 * iqr)
-            mask = _iqr_mask(plot_df[a1]) & _iqr_mask(plot_df[a2])
-            plot_df = plot_df[mask]
-        points = []
-        for _, row in plot_df.iterrows():
-            apt = df_filtered[df_filtered['id'] == row['id']].iloc[0]
-            points.append({"apartment_id": str(row['id']), "x": float(row[a1]), "y": float(row[a2]), "apartment": _ensure_string_id(apt.to_dict())})
-        payload = {"points": points, "x_label": a1, "y_label": a2, "mode": "raw"}
-        return JSONResponse(content=_sanitize_for_json(jsonable_encoder(payload)))
-
-    # PCA for >2 attributes
-    plot_df = df_filtered[selected + ['id']].dropna()
-    if plot_df.shape[0] == 0:
-        return {"points": [], "x_label": "", "y_label": "", "mode": "pca"}
-    X_sub = plot_df[selected].to_numpy(dtype=float)
-    # simple standardization
-    X_sub = (X_sub - X_sub.mean(axis=0)) / (X_sub.std(axis=0) + 1e-9)
-    pca = PCA(n_components=2)
-    coords = pca.fit_transform(X_sub)
-    points = []
-    for idx, row in enumerate(coords):
-        apt = df_filtered[df_filtered['id'] == plot_df.iloc[idx]['id']].iloc[0]
-        points.append({"apartment_id": str(plot_df.iloc[idx]['id']), "x": float(row[0]), "y": float(row[1]), "apartment": _ensure_string_id(apt.to_dict())})
-    payload = {"points": points, "x_label": "PC1", "y_label": "PC2", "mode": "pca", "explained_variance": pca.explained_variance_ratio_.tolist()}
-    return JSONResponse(content=_sanitize_for_json(jsonable_encoder(payload)))
+    """Legacy PCA endpoint - redirects to UMAP for better interpretability."""
+    result = _compute_umap_projection(
+        attributes=attributes,
+        filter_outliers=filter_outliers,
+        apartment_ids=apartment_ids,
+        price_min=price_min,
+        price_max=price_max,
+        accommodates_min=accommodates_min,
+        accommodates_max=accommodates_max,
+        bedrooms_min=bedrooms_min,
+        bedrooms_max=bedrooms_max,
+        bathrooms_min=bathrooms_min,
+        bathrooms_max=bathrooms_max,
+        beds_min=beds_min,
+        beds_max=beds_max,
+        minimum_nights_min=minimum_nights_min,
+        minimum_nights_max=minimum_nights_max,
+        maximum_nights_min=maximum_nights_min,
+        maximum_nights_max=maximum_nights_max,
+        distance_from_city_center_max=distance_from_city_center_max,
+        number_of_reviews_min=number_of_reviews_min,
+        availability_365_min=availability_365_min,
+        room_types=room_types,
+        property_types=property_types,
+        neighbourhoods=neighbourhoods,
+        neighbourhood_groups=neighbourhood_groups,
+        amenities=amenities,
+        n_topics=5,  # Use default value
+    )
+    return JSONResponse(content=result)
 
 
 @router.get("/explainability")
@@ -602,6 +893,7 @@ def get_clusters(
     property_types: Optional[List[str]] = Query(None),
     neighbourhoods: Optional[List[str]] = Query(None),
     neighbourhood_groups: Optional[List[str]] = Query(None),
+    amenities: Optional[List[str]] = Query(None),
 ):
     filters = {}
     for name, val in [
@@ -626,6 +918,8 @@ def get_clusters(
         filters["neighbourhoods"] = neighbourhoods
     if neighbourhood_groups:
         filters["neighbourhood_groups"] = neighbourhood_groups
+    if amenities:
+        filters["amenities"] = amenities
 
     df_filtered = DATASTORE.filter_df(filters, apartment_ids=apartment_ids)
     if df_filtered.shape[0] == 0:
@@ -699,6 +993,7 @@ def initial_sample(
     property_types: Optional[List[str]] = Query(None),
     neighbourhoods: Optional[List[str]] = Query(None),
     neighbourhood_groups: Optional[List[str]] = Query(None),
+    amenities: Optional[List[str]] = Query(None),
 ):
     # Build filters dict
     filters = {}
@@ -724,6 +1019,8 @@ def initial_sample(
         filters["neighbourhoods"] = neighbourhoods
     if neighbourhood_groups:
         filters["neighbourhood_groups"] = neighbourhood_groups
+    if amenities:
+        filters["amenities"] = amenities
 
     df_filtered = DATASTORE.filter_df(filters, apartment_ids=apartment_ids)
     if df_filtered.shape[0] == 0:

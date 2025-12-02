@@ -6,7 +6,7 @@
 import { useState, useEffect } from 'react';
 import { RecommendedListView } from './RecommendedListView';
 import { MapView } from './MapView';
-import { PCAScatterView } from './PCAScatterView';
+import { UMAPScatterView } from './UMAPScatterView';
 import { StarComparisonView } from './StarComparisonView';
 import { ExplainabilityView } from './ExplainabilityView';
 import { ApartmentDetailDrawer } from '../components/ApartmentDetailDrawer';
@@ -179,7 +179,7 @@ export const LayoutView = () => {
           {/* Middle Section: PCA */}
           <section className="section-visualizations">
             <div className="viz-panel">
-              <PCAScatterView />
+              <UMAPScatterView />
             </div>
           </section>
 

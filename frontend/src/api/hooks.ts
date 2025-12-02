@@ -221,6 +221,7 @@ export const usePCA = (
   pushIf('property_types', fPCA.property_types);
   pushIf('neighbourhoods', filters.neighbourhoods);
   pushIf('neighbourhood_groups', fPCA.neighbourhood_groups);
+  pushIf('amenities', fPCA.amenities);
   if (brushedApartmentIds && brushedApartmentIds.length > 0) {
     derived['apartment_ids'] = brushedApartmentIds;
   }

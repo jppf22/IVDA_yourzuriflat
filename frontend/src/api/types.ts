@@ -99,12 +99,21 @@ export interface RecommendationsSubsetResponse {
   total_in_subset: number;
 }
 
-// PCA response
+// Topic information from LDA modeling
+export interface TopicInfo {
+  topic_id: number;
+  label: string;
+  keywords: string[];
+}
+
+// PCA/UMAP response
 export interface PCAPoint {
   apartment_id: string;
   x: number;
   y: number;
   apartment: Apartment;
+  topic_id?: number | null;
+  topic_label?: string | null;
 }
 
 export interface PCAResponse {
@@ -112,7 +121,8 @@ export interface PCAResponse {
   x_label: string;
   y_label: string;
   explained_variance?: number[];
-  mode: 'pca' | 'raw';
+  mode: 'pca' | 'raw' | 'umap';
+  topics?: TopicInfo[];
 }
 
 // Explainability
