@@ -534,13 +534,15 @@ def _compute_umap_projection(
     # Standardization
     X_sub = (X_sub - X_sub.mean(axis=0)) / (X_sub.std(axis=0) + 1e-9)
     
-    # Apply UMAP dimensionality reduction
+    # Apply UMAP dimensionality reduction (optimized parameters)
     reducer = umap.UMAP(
         n_components=2,
         n_neighbors=min(15, len(X_sub) - 1),
         min_dist=0.1,
         metric='euclidean',
-        random_state=42
+        random_state=42,
+        n_epochs=200,  # Reduced from default 500 for faster computation
+        verbose=False
     )
     coords = reducer.fit_transform(X_sub)
     
@@ -565,14 +567,14 @@ def _compute_umap_projection(
         if 'neighbourhood' in apt_row and pd.notna(apt_row['neighbourhood']):
             doc_tokens.append(str(apt_row['neighbourhood']).lower().replace(' ', '_').replace('-', '_'))
         
-        # Parse amenities (stored as string)
+        # Parse amenities (stored as string) - optimized
         if 'amenities' in apt_row and pd.notna(apt_row['amenities']):
             amenities_str = str(apt_row['amenities'])
             # Simple parsing of amenity list
             amenities_str = amenities_str.strip('[]"')
             amenities_list = [a.strip().strip('"').lower().replace(' ', '_') 
-                            for a in amenities_str.split(',') if a.strip()]
-            doc_tokens.extend(amenities_list[:10])  # Limit to top 10 amenities
+                            for a in amenities_str.split(',')[:15] if a.strip()]  # Limit parsing to first 15
+            doc_tokens.extend(amenities_list[:5])  # Use only top 5 amenities for speed
         
         # Add price bucket
         price = apt_row.get('price', 0)
@@ -599,17 +601,18 @@ def _compute_umap_projection(
     # Build dictionary and corpus for LDA
     dictionary = corpora.Dictionary(text_corpus)
     # Filter extremes to remove very rare and very common tokens
-    dictionary.filter_extremes(no_below=2, no_above=0.8, keep_n=100)
+    dictionary.filter_extremes(no_below=2, no_above=0.8, keep_n=50)  # Reduced from 100 to 50
     corpus = [dictionary.doc2bow(doc) for doc in text_corpus]
     
-    # Train LDA model
+    # Train LDA model (optimized for speed)
     if len(corpus) > 0 and len(dictionary) > 0:
         lda_model = LdaModel(
             corpus=corpus,
             id2word=dictionary,
             num_topics=n_topics,
             random_state=42,
-            passes=10,
+            passes=3,  # Reduced from 10 to 3 for faster computation
+            iterations=50,  # Limit iterations per document
             alpha='auto',
             per_word_topics=True
         )

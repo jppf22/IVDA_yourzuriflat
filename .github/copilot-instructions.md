@@ -3,12 +3,12 @@
 ## Quick Start (First Time Setup)
 
 ```pwsh
-# 1. Setup conda environment (if not exists)
-conda env create -f environment.yml
-conda activate IVDA_GROUP
+# 1. Setup Python environment (Windows PowerShell)
+cd backend
+python.exe -m venv venv
+.\venv\Scripts\activate
 
 # 2. Start backend
-cd backend
 pip install -r requirements.txt
 uvicorn app.main:app --reload  # Runs at http://localhost:8000
 

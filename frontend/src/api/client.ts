@@ -13,7 +13,7 @@ class ApiClient {
   constructor() {
     this.client = axios.create({
       baseURL: BASE_URL,
-      timeout: 30000,
+      timeout: 60000,  // Increased to 60 seconds for UMAP+LDA computation
       headers: {
         'Content-Type': 'application/json',
       },
