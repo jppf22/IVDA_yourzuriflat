@@ -330,7 +330,7 @@ export const MapView = () => {
     >
       <div className="map-header">
         <div className="map-title-section">
-          <h3>Explore Zurich Apartments</h3>
+          <h3>Explore on the Map</h3>
           {isMapExpanded && (
             <button className="map-collapse-button" onClick={toggleMapExpanded} title="Minimize map">
               <span>✕</span>

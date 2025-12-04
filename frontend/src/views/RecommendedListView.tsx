@@ -749,7 +749,7 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
     <div className="recommended-list-view">
       <div className="list-header">
         <div className="header-top">
-          <h2>Recommended Apartments</h2>
+          <h2>Recommended For You</h2>
           <div className="header-actions">
             <button
               className="reset-profile-button"

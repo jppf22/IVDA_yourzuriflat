@@ -177,7 +177,7 @@ export const StarComparisonView = () => {
     return (
       <div className="star-comparison-view">
         <div className="comparison-header">
-          <h3>Apartment Comparison</h3>
+          <h3>Compare Apartment Features</h3>
         </div>
         <div className="empty-state">
           <p>Select apartments or rate some to see comparison</p>
@@ -191,7 +191,7 @@ export const StarComparisonView = () => {
       <div className="comparison-header">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <h3>Apartment Comparison</h3>
+            <h3>Compare Apartment Features</h3>
             <p className="comparison-subtitle">Comparing {apartmentsToCompare.length} apartments</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

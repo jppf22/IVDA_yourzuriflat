@@ -264,7 +264,7 @@ export const ExplainabilityView = () => {
   return (
     <div className="explainability-view">
       <div className="explainability-header">
-        <h3>Model Reasoning</h3>
+        <h3>Your Preferences</h3>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '8px', flexWrap: 'wrap' }}>
           <p className="explainability-subtitle" style={{ margin: 0 }}>
             Feature contributions for {explainabilityData.contributions.length} apartment(s)

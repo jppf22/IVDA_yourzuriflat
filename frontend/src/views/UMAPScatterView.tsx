@@ -278,7 +278,7 @@ export const UMAPScatterView = () => {
     return (
       <div className="pca-scatter-view">
         <div className="scatter-header">
-          <h3>Apartment Property Comparison (UMAP)</h3>
+          <h3>Discover Similar Apartments</h3>
           <div className="scatter-controls">
             <AttributeMultiSelect
               candidates={dynamicCandidates}
@@ -469,7 +469,7 @@ export const UMAPScatterView = () => {
   return (
     <div className="pca-scatter-view" ref={containerRef}>
       <div className="scatter-header">
-        <h3>Apartment Property Comparison (UMAP)</h3>
+        <h3>Discover Similar Apartments</h3>
         {mode === 'umap' && attributes.length > 2 && (
           <div className="pca-info" style={{ 
             fontSize: '0.9em', 
