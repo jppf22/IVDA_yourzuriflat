@@ -8,10 +8,10 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder
 
 class DataStore:
     def __init__(self, path: str = None):
-        base = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+        base = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
         if path is None:
-            path = os.path.join(base, "data", "listings_clean.json")
-        self.base_dir = base
+            path = os.path.join(base, "Notebooks", "listings_clean.json")
+        self.base_dir = os.path.dirname(os.path.dirname(base))  # Go up to project root
         self.raw = pd.read_json(path, lines=True)
         self._preprocess()
 

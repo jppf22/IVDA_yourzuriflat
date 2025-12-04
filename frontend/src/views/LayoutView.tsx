@@ -11,6 +11,7 @@ import { StarComparisonView } from './StarComparisonView';
 import { ExplainabilityView } from './ExplainabilityView';
 import { ApartmentDetailDrawer } from '../components/ApartmentDetailDrawer';
 import { FilterPanel } from '../components/FilterPanel';
+import { CalibrationPopup } from '../components/CalibrationPopup';
 import { useAppStore } from '../store/useAppStore';
 import { useRateMutation, useRemoveRatingMutation } from '../api/hooks';
 import apiClient from '../api/client';
@@ -137,6 +138,9 @@ export const LayoutView = () => {
 
   return (
     <div className="layout-view">
+      {/* Calibration Popup - Only shows when ratingsCount === 0 */}
+      <CalibrationPopup />
+
       {/* Sync Loading Overlay */}
       {isSyncing && (
         <div className="sync-overlay">

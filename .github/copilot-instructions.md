@@ -1,5 +1,26 @@
 # YourZuriFlat - AI Coding Assistant Guide
 
+## Quick Start (First Time Setup)
+
+```pwsh
+# 1. Setup conda environment (if not exists)
+conda env create -f environment.yml
+conda activate IVDA_GROUP
+
+# 2. Start backend
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload  # Runs at http://localhost:8000
+
+# 3. Start frontend (new terminal)
+cd frontend
+cp .env.example .env  # Edit if backend URL differs
+npm install
+npm run dev  # Runs at http://localhost:5173
+```
+
+**Data loads automatically** on backend startup from `backend/Notebooks/listings_clean.json` (2348 apartments).
+
 ## Project Purpose
 Interactive Visual Data Analysis (IVDA) tool for Zurich apartment rentals. **Content-based recommendation system** using cosine similarity to learn user preferences from ratings. **Always align changes with IVDA tasks T1-T6** (identify, compare, explain, calibrate, explore, relate apartments - see `AGENT.md` section 2.3).
 
@@ -63,8 +84,7 @@ Key type contracts:
 ### Start Backend (Windows PowerShell)
 ```pwsh
 cd backend
-conda activate IVDA_GROUP  # Use existing conda env
-pip install -r requirements.txt  # fastapi, uvicorn, pandas, numpy, scikit-learn
+conda activate IVDA_GROUP  # Or your preferred Python env
 uvicorn app.main:app --reload
 ```
 Backend runs at `http://localhost:8000` | Docs at `http://localhost:8000/docs`
@@ -72,15 +92,17 @@ Backend runs at `http://localhost:8000` | Docs at `http://localhost:8000/docs`
 ### Start Frontend
 ```pwsh
 cd frontend
-npm install  # If first time or package.json changed
 npm run dev
 ```
 Frontend runs at `http://localhost:5173`
 
 ### Environment Variables
-- **Frontend**: Create `.env` file in `frontend/` with:
-  - `VITE_BACKEND_URL` - Backend API URL (default: `http://localhost:8000`)
-- **Backend**: No environment variables required - CORS origins hardcoded in `app/main.py`
+- **Frontend**: Copy `.env.example` to `.env` (optional - defaults to `http://localhost:8000`):
+  ```pwsh
+  cd frontend
+  cp .env.example .env
+  ```
+- **Backend**: No environment variables required - CORS origins hardcoded in `app/main.py` (ports 5173, 3000)
 
 ### Debugging Tips
 - **Frontend errors**: Check browser console and React Query DevTools
@@ -202,6 +224,7 @@ Enhanced content-based model using **feature-weighted cosine similarity**, not r
 15. **UMAP requires 10+ points** - backend returns empty array if fewer points; frontend handles gracefully
 16. **Topic modeling is non-deterministic** - LDA uses random_state=42 but may vary slightly; topics regenerated per request
 17. **PCA endpoint redirects to UMAP** - maintained for backward compatibility but uses UMAP+LDA internally
+18. **Always activate conda environment** - `conda activate IVDA_GROUP` before running backend commands
 
 ## API Endpoints Reference
 - `GET /apartments` - Paginated list with 20+ filter params (see `routes.py`)
