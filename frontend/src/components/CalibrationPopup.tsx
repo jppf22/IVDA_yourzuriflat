@@ -124,7 +124,9 @@ export const CalibrationPopup = () => {
   const { 
     sessionId, 
     ratingsCount,
-    setUserRating
+    userRatings,
+    setUserRating,
+    setCalibrationComplete,
   } = useAppStore();
 
   // Track ratings for all 5 apartments (apartmentId -> rating)
@@ -157,32 +159,46 @@ export const CalibrationPopup = () => {
   };
 
   const handleSubmit = async () => {
-    // Find which apartments have ratings
+    // Find which apartments have ratings > 0
     const ratedApartments = Object.entries(apartmentRatings).filter(([, rating]) => rating > 0);
-    
+
     if (ratedApartments.length === 0) {
       return;
     }
 
-    // Submit the first rated apartment (user only needs to rate one)
-    const [apartmentId, rating] = ratedApartments[0];
-    
-    // Update local store FIRST (this also updates ratingsCount automatically)
-    setUserRating(apartmentId, rating);
+    // Guard against double-counting if calibration is revisited:
+    // skip apartments that are already in userRatings with the same value
+    const distinctNewRatings = ratedApartments.filter(([apartmentId, rating]) => {
+      const existing = userRatings[apartmentId];
+      return existing === undefined || existing !== rating;
+    });
+
+    if (distinctNewRatings.length === 0) {
+      return;
+    }
+
+    // Update local store for all newly rated apartments (updates ratingsCount automatically)
+    distinctNewRatings.forEach(([apartmentId, rating]) => {
+      setUserRating(apartmentId, rating);
+    });
 
     try {
-      // Then submit to backend
-      await submitRatingMutation.mutateAsync({
-        session_id: sessionId,
-        apartment_id: apartmentId,
-        rating: rating,
-      });
-
-      // Popup will auto-close because ratingsCount is now 1 (updated by setUserRating)
-
+      // Submit all new ratings to backend in parallel
+      await Promise.all(
+        distinctNewRatings.map(([apartmentId, rating]) =>
+          submitRatingMutation.mutateAsync({
+            session_id: sessionId,
+            apartment_id: apartmentId,
+            rating,
+          })
+        )
+      );
+      // Mark calibration as complete explicitly so popup closes immediately
+      setCalibrationComplete(true);
     } catch (err) {
-      console.error('Failed to submit rating:', err);
-      // Note: We already updated local store, so rating is saved even if backend fails
+      console.error('Failed to submit one or more calibration ratings:', err);
+      // Local store is already updated, so ratings stay in the UI even if backend fails
+      setCalibrationComplete(true);
     }
   };
 
