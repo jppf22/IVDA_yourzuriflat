@@ -439,8 +439,14 @@ export const UMAPScatterView = () => {
   };
   
   const layout: Partial<Layout> = {
-    xaxis: { title: { text: x_label || 'UMAP 1' } },
-    yaxis: { title: { text: y_label || 'UMAP 2' } },
+    // When more than 2 attributes are selected and we're in UMAP mode,
+    // axes are abstract projection dimensions, so hide titles, ticks, and lines.
+    xaxis: attributes.length > 2 && mode === 'umap'
+      ? { title: { text: '' }, showticklabels: false, ticks: '', showline: false, zeroline: false }
+      : { title: { text: x_label || 'UMAP 1' } },
+    yaxis: attributes.length > 2 && mode === 'umap'
+      ? { title: { text: '' }, showticklabels: false, ticks: '', showline: false, zeroline: false }
+      : { title: { text: y_label || 'UMAP 2' } },
     height: plotHeight,
     margin: { t: 50, b: 80, l: 80, r: 40 },
     hovermode: 'closest',

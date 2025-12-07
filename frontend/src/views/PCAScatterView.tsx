@@ -395,8 +395,14 @@ export const PCAScatterView = () => {
     customdata: points.map((p: PCAPoint) => p.apartment_id),
   };
   const layout: Partial<Layout> = {
-    xaxis: { title: { text: x_label || 'PC1' } },
-    yaxis: { title: { text: y_label || 'PC2' } },
+    // When more than 2 attributes are selected (PCA mode), axes are abstract
+    // projection dimensions, so hide titles, ticks, and lines.
+    xaxis: attributes.length > 2 && mode === 'pca'
+      ? { title: { text: '' }, showticklabels: false, ticks: '', showline: false, zeroline: false }
+      : { title: { text: x_label || 'PC1' } },
+    yaxis: attributes.length > 2 && mode === 'pca'
+      ? { title: { text: '' }, showticklabels: false, ticks: '', showline: false, zeroline: false }
+      : { title: { text: y_label || 'PC2' } },
     height: 550,
     margin: { t: 50, b: 100, l: 100, r: 40 },
     hovermode: 'closest',
