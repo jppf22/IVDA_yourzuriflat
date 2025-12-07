@@ -368,31 +368,96 @@ export const PCAScatterView = () => {
 
   const { points, x_label, y_label, mode, explained_variance } = pcaData as PCAResponse;
   const scatterStyles = points.map((p: PCAPoint) => deriveMarkerStyle(p.apartment_id));
-  
+
   // Calculate total explained variance if available
-  const totalVariance = explained_variance 
+  const totalVariance = explained_variance
     ? explained_variance.reduce((sum, val) => sum + val, 0) * 100
     : null;
-  const trace: Data = {
+
+  const baseXs: number[] = [];
+  const baseYs: number[] = [];
+  const baseColors: string[] = [];
+  const baseOpacities: number[] = [];
+  const baseLineColors: string[] = [];
+  const baseLineWidths: number[] = [];
+  const baseTexts: string[] = [];
+  const baseIds: string[] = [];
+
+  const topXs: number[] = [];
+  const topYs: number[] = [];
+  const topColors: string[] = [];
+  const topOpacities: number[] = [];
+  const topLineColors: string[] = [];
+  const topLineWidths: number[] = [];
+  const topTexts: string[] = [];
+  const topIds: string[] = [];
+
+  const topIdSet = new Set(topRecommendationIds);
+
+  points.forEach((p: PCAPoint, idx: number) => {
+    const style = scatterStyles[idx];
+    const a = p.apartment;
+    const text = `<b>${a.name}</b><br>${a.property_type}<br>${a.room_type}<br>CHF ${a.price}/night<br>Accom: ${a.accommodates}`;
+    const id = String(p.apartment_id);
+    const isTop = topIdSet.has(id);
+
+    if (isTop) {
+      topXs.push(p.x);
+      topYs.push(p.y);
+      topColors.push(style.color);
+      topOpacities.push(1);
+      topLineColors.push(style.lineColor);
+      topLineWidths.push(style.lineWidth > 0 ? style.lineWidth : 2);
+      topTexts.push(text);
+      topIds.push(id);
+    } else {
+      baseXs.push(p.x);
+      baseYs.push(p.y);
+      baseColors.push(style.color);
+      baseOpacities.push(style.opacity);
+      baseLineColors.push(style.lineColor);
+      baseLineWidths.push(style.lineWidth);
+      baseTexts.push(text);
+      baseIds.push(id);
+    }
+  });
+
+  const baseTrace: Data = {
     type: 'scatter',
     mode: 'markers',
-    x: points.map((p: PCAPoint) => p.x),
-    y: points.map((p: PCAPoint) => p.y),
+    x: baseXs,
+    y: baseYs,
     marker: {
       size: 8,
-      color: scatterStyles.map(style => style.color),
-      opacity: scatterStyles.map(style => style.opacity),
+      color: baseColors,
+      opacity: baseOpacities,
       line: {
-        color: scatterStyles.map(style => style.lineColor),
-        width: scatterStyles.map(style => style.lineWidth),
+        color: baseLineColors,
+        width: baseLineWidths,
       },
     },
-    text: points.map((p: PCAPoint) => {
-      const a = p.apartment;
-      return `<b>${a.name}</b><br>${a.property_type}<br>${a.room_type}<br>CHF ${a.price}/night<br>Accom: ${a.accommodates}`;
-    }),
+    text: baseTexts,
     hoverinfo: 'text',
-    customdata: points.map((p: PCAPoint) => p.apartment_id),
+    customdata: baseIds,
+  };
+
+  const topTrace: Data = {
+    type: 'scatter',
+    mode: 'markers',
+    x: topXs,
+    y: topYs,
+    marker: {
+      size: 11,
+      color: topColors,
+      opacity: topOpacities,
+      line: {
+        color: topLineColors,
+        width: topLineWidths,
+      },
+    },
+    text: topTexts,
+    hoverinfo: 'text',
+    customdata: topIds,
   };
   const layout: Partial<Layout> = {
     // When more than 2 attributes are selected (PCA mode), axes are abstract
@@ -502,7 +567,7 @@ export const PCAScatterView = () => {
         </div>
       </div>
       <Plot
-        data={[trace]}
+        data={[baseTrace, topTrace]}
         layout={layout}
         config={{ displayModeBar: true, displaylogo: false }}
         onClick={handlePlotlyClick}

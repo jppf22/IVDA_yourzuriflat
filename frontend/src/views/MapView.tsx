@@ -202,34 +202,100 @@ export const MapView = () => {
   // Always show individual apartments at all zoom levels (no clustering)
   const markerStyles = apartments.map((apt) => deriveMarkerStyle(apt.id));
 
-  const apartmentTrace: Data = {
+  const baseLats: number[] = [];
+  const baseLons: number[] = [];
+  const baseColors: string[] = [];
+  const baseOpacities: number[] = [];
+  const baseLineColors: string[] = [];
+  const baseLineWidths: number[] = [];
+  const baseTexts: string[] = [];
+  const baseIds: string[] = [];
+
+  const topLats: number[] = [];
+  const topLons: number[] = [];
+  const topColors: string[] = [];
+  const topOpacities: number[] = [];
+  const topLineColors: string[] = [];
+  const topLineWidths: number[] = [];
+  const topTexts: string[] = [];
+  const topIds: string[] = [];
+
+  const topIdSet = new Set(topRecommendationIds);
+
+  apartments.forEach((apt, idx) => {
+    const style = markerStyles[idx];
+    const id = String(apt.id);
+    const text =
+      `<b>${apt.name}</b><br>` +
+      `${formatPrice(apt.price)}/night<br>` +
+      `${apt.property_type}<br>` +
+      `${formatRoomType(apt.room_type)}<br>` +
+      `Accommodates: ${apt.accommodates}<br>` +
+      `${formatDistance((apt.distance_from_city_center || apt.distance_from_center || 0))} from center`;
+    const isTop = topIdSet.has(id);
+
+    if (isTop) {
+      topLats.push(apt.latitude);
+      topLons.push(apt.longitude);
+      topColors.push(style.color);
+      topOpacities.push(1);
+      topLineColors.push(style.lineColor);
+      topLineWidths.push(style.lineWidth > 0 ? style.lineWidth : 2);
+      topTexts.push(text);
+      topIds.push(id);
+    } else {
+      baseLats.push(apt.latitude);
+      baseLons.push(apt.longitude);
+      baseColors.push(style.color);
+      baseOpacities.push(style.opacity);
+      baseLineColors.push(style.lineColor);
+      baseLineWidths.push(style.lineWidth);
+      baseTexts.push(text);
+      baseIds.push(id);
+    }
+  });
+
+  const baseApartmentTrace: Data = {
     type: 'scattermapbox',
     mode: 'markers',
-    lat: apartments.map((apt) => apt.latitude),
-    lon: apartments.map((apt) => apt.longitude),
+    lat: baseLats,
+    lon: baseLons,
     marker: {
       size: 10,
-      color: markerStyles.map((style) => style.color),
-      opacity: markerStyles.map((style) => style.opacity),
+      color: baseColors,
+      opacity: baseOpacities,
       line: {
-        color: markerStyles.map((style) => style.lineColor),
-        width: markerStyles.map((style) => style.lineWidth),
+        color: baseLineColors,
+        width: baseLineWidths,
       },
     },
-    text: apartments.map(
-      (apt) =>
-        `<b>${apt.name}</b><br>` +
-        `${formatPrice(apt.price)}/night<br>` +
-        `${apt.property_type}<br>` +
-        `${formatRoomType(apt.room_type)}<br>` +
-        `Accommodates: ${apt.accommodates}<br>` +
-        `${formatDistance((apt.distance_from_city_center || apt.distance_from_center || 0))} from center`
-    ),
+    text: baseTexts,
     hoverinfo: 'text',
-    customdata: apartments.map((apt) => String(apt.id)),
+    customdata: baseIds,
     name: 'Apartments',
   };
-  traces.push(apartmentTrace);
+  traces.push(baseApartmentTrace);
+
+  const topApartmentTrace: Data = {
+    type: 'scattermapbox',
+    mode: 'markers',
+    lat: topLats,
+    lon: topLons,
+    marker: {
+      size: 13,
+      color: topColors,
+      opacity: topOpacities,
+      line: {
+        color: topLineColors,
+        width: topLineWidths,
+      },
+    },
+    text: topTexts,
+    hoverinfo: 'text',
+    customdata: topIds,
+    name: 'Top Recommendations',
+  };
+  traces.push(topApartmentTrace);
 
   const layout: Partial<Layout> = {
     mapbox: {
