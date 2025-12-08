@@ -222,14 +222,10 @@ export const usePCA = (
   pushIf('neighbourhoods', filters.neighbourhoods);
   pushIf('neighbourhood_groups', fPCA.neighbourhood_groups);
   pushIf('amenities', fPCA.amenities);
-  if (brushedApartmentIds && brushedApartmentIds.length > 0) {
-    derived['apartment_ids'] = brushedApartmentIds;
-  }
 
   const filterSig = JSON.stringify(derived, Object.keys(derived).sort());
-  const selectionSig = (brushedApartmentIds || []).join(',');
   return useQuery<PCAResponse>({
-    queryKey: ['pca', attributes, undefined, outliers, filterSig, selectionSig],
+    queryKey: ['pca', attributes, undefined, outliers, filterSig],
     queryFn: () => apiClient.get<PCAResponse>('/pca', derived),
     enabled: true,
     staleTime: 5 * 60 * 1000,

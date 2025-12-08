@@ -414,10 +414,10 @@ export const PCAScatterView = () => {
       baseXs.push(p.x);
       baseYs.push(p.y);
       baseColors.push(style.color);
-      baseOpacities.push(style.opacity);
-      baseLineColors.push(style.lineColor);
-      baseLineWidths.push(style.lineWidth);
-      baseTexts.push(text);
+      // Strongly dim non-brushed points, give brushed ones a clear black outline
+      globalBaseOpacities.push(isInBrush || !hasSelection ? style.opacity : 0.1);
+      globalBaseLineColors.push(isInBrush ? '#000000' : 'rgba(0,0,0,0)');
+      globalBaseLineWidths.push(isInBrush ? 2 : 0);
       baseIds.push(id);
     }
   });
@@ -484,10 +484,14 @@ export const PCAScatterView = () => {
   };
   const handlePlotlySelected = (data: unknown) => {
     const eventData = data as { points?: Array<{ customdata?: string }> };
-    if (eventData && eventData.points) {
-      const selectedIds = eventData.points
-        .map(p => p.customdata)
-        .filter(Boolean) as string[];
+    if (!eventData || !eventData.points) return;
+
+    const selectedIds = eventData.points
+      .map(p => p.customdata)
+      .filter(Boolean) as string[];
+
+    // Preserve current brush if selection is empty to avoid collapsing split-view.
+    if (selectedIds.length > 0) {
       setBrushedApartmentIds(selectedIds);
     }
   };
