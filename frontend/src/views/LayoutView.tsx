@@ -173,30 +173,34 @@ export const LayoutView = () => {
           <FilterPanel />
         </aside>
 
-        {/* Primary View Area */}
-        <main className="primary-area">
-          {/* Top Section: Recommended List */}
-          <section className="section-recommended">
+        {/* Content Area with Recommended List on top */}
+        <div className="content-area">
+          {/* Recommended List - Top Row */}
+          <section className="recommended-top-section">
             <RecommendedListView onRate={handleRate} onRemoveRating={handleRemoveRating} currentRatings={userRatings} />
           </section>
 
-          {/* Middle Section: PCA */}
-          <section className="section-visualizations">
-            <div className="viz-panel">
-              <UMAPScatterView />
-            </div>
-          </section>
+          {/* Primary View Area - 2x2 Grid Layout */}
+          <main className="primary-area">
+            {/* Top Row: Global UMAP (left) + Filtered UMAP (right) */}
+            <section className="section-umap-global">
+              <UMAPScatterView isGlobalView={true} />
+            </section>
+            
+            <section className="section-umap-filtered">
+              <UMAPScatterView isGlobalView={false} />
+            </section>
 
-          {/* Bottom Section: Comparison and Explainability */}
-          <section className="section-analysis">
-            <div className="analysis-panel">
+            {/* Bottom Row: Star Comparison (left) + Explainability (right) */}
+            <section className="section-star">
               <StarComparisonView />
-            </div>
-            <div className="analysis-panel">
+            </section>
+            
+            <section className="section-explainability">
               <ExplainabilityView />
-            </div>
-          </section>
-        </main>
+            </section>
+          </main>
+        </div>
       </div>
 
       {/* Detail Drawer */}

@@ -94,6 +94,11 @@ export interface AppState {
   isMapExpanded: boolean;
   toggleMapExpanded: () => void;
   setMapExpanded: (expanded: boolean) => void;
+
+  // UMAP expansion state
+  isUMAPExpanded: boolean;
+  toggleUMAPExpanded: () => void;
+  setUMAPExpanded: (expanded: boolean) => void;
 }
 
 const defaultFilters: ApartmentFilters = {
@@ -251,6 +256,10 @@ export const useAppStore = create<AppState>()(
   isMapExpanded: false,
   toggleMapExpanded: () => set((state) => ({ isMapExpanded: !state.isMapExpanded })),
   setMapExpanded: (expanded) => set({ isMapExpanded: expanded }),
+
+  isUMAPExpanded: false,
+  toggleUMAPExpanded: () => set((state) => ({ isUMAPExpanded: !state.isUMAPExpanded })),
+  setUMAPExpanded: (expanded) => set({ isUMAPExpanded: expanded }),
 
   // Dynamic filter fields
   activeFilterFields: ['minimum_nights','accommodates','price','distance_from_city_center'],

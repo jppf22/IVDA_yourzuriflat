@@ -1,22 +1,92 @@
 .pca-scatter-view {
   display: flex;
   flex-direction: column;
-  min-height: 600px;
+  height: 100%;
   background: white;
   border-radius: 8px;
   overflow: visible;
+}
+
+/* Expanded overlay mode */
+.umap-view.umap-expanded {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.umap-view.umap-expanded .pca-scatter-view {
+  width: 95%;
+  height: 95%;
+  max-width: none;
+  max-height: none;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
 .scatter-header {
   padding: 1rem 1.5rem;
   border-bottom: 1px solid #e5e7eb;
   background: #f9fafb;
+  position: relative;
 }
 
 .scatter-header h3 {
   margin: 0 0 1rem 0;
   font-size: 1.1rem;
   color: #1f2937;
+}
+
+.umap-expand-button-small {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: #3498db;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  transition: background 0.2s;
+}
+
+.umap-expand-button-small:hover {
+  background: #2980b9;
+}
+
+.umap-collapse-button {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+  font-size: 1.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  transition: background 0.2s;
+}
+
+.umap-collapse-button:hover {
+  background: #c0392b;
 }
 
 .scatter-controls {
