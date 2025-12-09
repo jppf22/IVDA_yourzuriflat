@@ -1,28 +1,32 @@
 .pca-scatter-view {
   display: flex;
   flex-direction: column;
-  min-height: 600px;
+  height: 100%;
   background: white;
   border-radius: 8px;
-  overflow: visible;
+  overflow: hidden;
+}
+
+.scatter-plot-container {
+  flex: 1;
+  min-height: 0;
 }
 
 .scatter-header {
-  padding: 1rem 1.5rem;
+  padding: 1rem 1.5rem 0.5rem 1.5rem;
   border-bottom: 1px solid #e5e7eb;
   background: #f9fafb;
 }
 
 .scatter-header h3 {
-  margin: 0 0 1rem 0;
-  font-size: 1.1rem;
+  font-size: 1rem;
   color: #1f2937;
 }
 
 .scatter-controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: 0.25rem;
   align-items: center;
 }
 
@@ -43,20 +47,20 @@
 .control-group {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.25rem;
 }
 
 .control-group label {
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   color: #374151;
   font-weight: 500;
 }
 
 .control-group select {
-  padding: 0.4rem;
+  padding: 0.25rem;
   border: 1px solid #d1d5db;
   border-radius: 4px;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   background: white;
   cursor: pointer;
 }
@@ -71,6 +75,26 @@
   cursor: pointer;
   width: 16px;
   height: 16px;
+}
+
+.toggle-outliers-btn {
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  color: #374151;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.toggle-outliers-btn:hover {
+  background: #e5e7eb;
+}
+
+.toggle-outliers-btn.active {
+  background: #1f2937;
+  color: #f9fafb;
+  border-color: #111827;
 }
 
 .empty-state {
@@ -218,27 +242,4 @@
   font-size: 0.6rem;
   color: #6b7280;
   align-self: center;
-}
-
-/* Recommendations badge */
-.recommendations-badge {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.4rem 0.8rem;
-  background: linear-gradient(135deg, #fef3c7 0%, #fcd34d 100%);
-  border: 1px solid #f59e0b;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #92400e;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.recommendations-badge .badge-icon {
-  font-size: 1rem;
-}
-
-.recommendations-badge .badge-text {
-  white-space: nowrap;
 }

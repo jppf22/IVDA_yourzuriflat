@@ -8,20 +8,25 @@
 }
 
 .comparison-header {
-  padding: 1rem 1.5rem;
+  padding: 1rem 1.5rem 0.5rem 1.5rem;
   border-bottom: 1px solid #e5e7eb;
   background: #f9fafb;
 }
 
+.comparison-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .comparison-header h3 {
-  margin: 0 0 0.25rem 0;
-  font-size: 1.1rem;
+  font-size: 1rem;
   color: #1f2937;
 }
 
 .comparison-subtitle {
   margin: 0;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: #6b7280;
 }
 
@@ -37,20 +42,15 @@
 
 /* Star chart attribute controls */
 .star-controls {
-  padding: 0.75rem 1rem 0.5rem 1rem;
-  background: #ffffff;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 0.5rem 0rem 0.5rem 0rem;
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  flex-direction: row;
+  gap: 0.25rem;
 }
 
-.star-controls-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+.star-controls h4 {
+  font-size: 0.9rem;
+  color: #1f2937;
 }
 
 .preset-buttons button {
@@ -76,6 +76,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
   gap: 0.4rem 0.75rem;
+  overflow: hidden;
 }
 
 .attr-label {
@@ -125,7 +126,7 @@
 
 .selected-tags {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.4rem;
   padding: 0.4rem 0.6rem;
   background: #f3f4f6;
@@ -133,9 +134,11 @@
   border-radius: 6px;
   cursor: pointer;
   min-height: 34px;
+  max-height: 34px;
   align-items: center;
+  overflow: hidden;
 }
-.selected-tags .placeholder { color: #6b7280; font-size: 0.7rem; }
+.selected-tags .placeholder { color: #6b7280; font-size: 0.7rem; white-space: nowrap; }
 .tag {
   background: #e0e7ff;
   color: #1e3a8a;

@@ -129,7 +129,6 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
   const {
     sessionId,
     selectedApartmentIds,
-    toggleApartmentSelection,
     clearSelection,
     openDetailDrawer,
     topRecommendations,
@@ -750,31 +749,50 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
       <div className="list-header">
         <div className="header-top">
           <h2>Recommended For You</h2>
-          <div className="header-actions">
-            <button
-              className="reset-profile-button"
-              onClick={handleClearAllRatings}
-              disabled={!canResetProfile || isResettingProfile}
-              title={
-                canResetProfile
-                  ? 'Remove all ratings and restart your recommendation profile'
-                  : 'No ratings to clear yet'
-              }
-            >
-              {isResettingProfile ? 'Resetting…' : 'Reset Ratings'}
-            </button>
-            {modelTrained && ratingsCount >= 5 && (
-              <button
-                className="toggle-explain-button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setShowExplainability((visible) => !visible);
-                }}
-                title={showExplainability ? 'Hide explainability panel' : 'Show explainability panel'}
-              >
-                {showExplainability ? '📊 Hide Explainability' : '📊 Show Explainability'}
-              </button>
-            )}
+          <div className="header-right">
+            <div className="header-actions">
+              <div className="ranking-controls">
+                  <label htmlFor="ranking-select">Ranking mode</label>
+                  <select
+                    id="ranking-select"
+                    className="ranking-select"
+                    value={selectedRankingId}
+                    onChange={(event) => setSelectedRankingId(event.target.value as RankingOptionId)}
+                  >
+                    {RANKING_OPTIONS.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+              </div>
+              <div className="header-buttons">
+                {modelTrained && ratingsCount >= 5 && (
+                  <button
+                  className="toggle-explain-button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setShowExplainability((visible) => !visible);
+                  }}
+                  title={showExplainability ? 'Hide explainability panel' : 'Show explainability panel'}
+                  >
+                    {showExplainability ? '📊 Hide Explainability' : '📊 Show Explainability'}
+                  </button>
+                )}
+                <button
+                  className="reset-profile-button"
+                  onClick={handleClearAllRatings}
+                  disabled={!canResetProfile || isResettingProfile}
+                  title={
+                    canResetProfile
+                    ? 'Remove all ratings and restart your recommendation profile'
+                    : 'No ratings to clear yet'
+                  }
+                >
+                  {isResettingProfile ? 'Resetting…' : 'Reset Ratings'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -792,34 +810,6 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
             🔖 Bookmarked <span className="tab-count">({bookmarkedCount})</span>
           </button>
         </div>
-
-        <div className="ranking-controls">
-          <label htmlFor="ranking-select">Ranking mode</label>
-          <select
-            id="ranking-select"
-            className="ranking-select"
-            value={selectedRankingId}
-            onChange={(event) => setSelectedRankingId(event.target.value as RankingOptionId)}
-          >
-            {RANKING_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          {rankingOption.description && <span className="ranking-description">{rankingOption.description}</span>}
-        </div>
-
-        {!modelTrained && (
-          <div className="calibration-notice">
-            ⚠️ Model not yet trained. Rate {Math.max(0, 5 - ratingsCount)} more apartment{ratingsCount < 4 ? 's' : ''} for personalized recommendations.
-          </div>
-        )}
-        {modelTrained && ratingsCount >= 5 && (
-          <div className="success-notice">
-            ✅ Model trained! Showing personalized recommendations based on your preferences.
-          </div>
-        )}
       </div>
 
       <div className={`content-container ${showExplainability ? 'with-panel' : 'full-width'}`}>
@@ -827,7 +817,6 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
           <table className="apartments-table">
             <thead>
               <tr>
-                <th className="col-select">Select</th>
                 <th className="col-rank">Rank</th>
                 <th className="col-name">Name</th>
                 <th className="col-price">Price</th>
@@ -858,14 +847,6 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
                     className={`apartment-row ${isSelected ? 'selected' : ''} ${isBrushed ? 'brushed' : ''}`}
                     style={{ borderLeft: isTop ? `4px solid ${color}` : undefined }}
                   >
-                    <td className="col-select">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleApartmentSelection(apartmentId)}
-                        aria-label={`Select ${apartment.name}`}
-                      />
-                    </td>
                     <td className="col-rank">
                       <span
                         className="rank-badge"

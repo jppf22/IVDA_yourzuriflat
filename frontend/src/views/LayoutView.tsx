@@ -31,6 +31,9 @@ export const LayoutView = () => {
     setSyncComplete
   } = useAppStore();
 
+  const [showCalibrationToast, setShowCalibrationToast] = useState(false);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
+
   const rateMutation = useRateMutation();
   const removeRatingMutation = useRemoveRatingMutation();
 
@@ -90,6 +93,30 @@ export const LayoutView = () => {
 
     syncRatings();
   }, [sessionId]); // Only run once on mount with current sessionId
+
+  // Show a temporary bottom-center toast while the user is calibrating the model
+  useEffect(() => {
+    if (ratingsCount > 0 && ratingsCount < 5) {
+      setShowCalibrationToast(true);
+      const timeoutId = window.setTimeout(() => {
+        setShowCalibrationToast(false);
+      }, 6000);
+      return () => window.clearTimeout(timeoutId);
+    }
+    return undefined;
+  }, [ratingsCount]);
+
+  // Show a short success toast once the user reaches 5 ratings
+  useEffect(() => {
+    if (ratingsCount === 5) {
+      setShowSuccessToast(true);
+      const timeoutId = window.setTimeout(() => {
+        setShowSuccessToast(false);
+      }, 6000);
+      return () => window.clearTimeout(timeoutId);
+    }
+    return undefined;
+  }, [ratingsCount]);
 
   const handleRate = (apartmentId: string, rating: number) => {
     // Update persisted store immediately
@@ -185,14 +212,10 @@ export const LayoutView = () => {
             <div className="viz-panel">
               <UMAPScatterView />
             </div>
-          </section>
-
-          {/* Bottom Section: Comparison and Explainability */}
-          <section className="section-analysis">
-            <div className="analysis-panel">
+            <div className="viz-panel">
               <StarComparisonView />
             </div>
-            <div className="analysis-panel">
+            <div className="viz-panel">
               <ExplainabilityView />
             </div>
           </section>
@@ -201,6 +224,22 @@ export const LayoutView = () => {
 
       {/* Detail Drawer */}
       <ApartmentDetailDrawer onRate={handleRate} onRemoveRating={handleRemoveRating} currentRatings={userRatings} />
+
+      {(showCalibrationToast || showSuccessToast) && (
+        <div className="floating-notifications">
+          {showCalibrationToast && (
+            <div className="calibration-notice">
+              ⚠️ Model not yet trained. Rate {Math.max(0, 5 - ratingsCount)} more apartment
+              {ratingsCount < 4 ? 's' : ''} for personalized recommendations.
+            </div>
+          )}
+          {showSuccessToast && (
+            <div className="success-notice">
+              ✅ Model trained! Showing personalized recommendations based on your preferences.
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

@@ -161,12 +161,12 @@ export const StarComparisonView = () => {
         range: [0, 1],
       },
     },
-    height: 550,
-    margin: { t: 40, b: 100, l: 80, r: 140 },
-    showlegend: true,
+    height: 400,
+    margin: { t: 0, b: 0, l: 100, r: 140 },
+    showlegend: false,
     legend: {
       orientation: 'v',
-      x: 1.05,
+      x: 1,
       y: 1,
     },
   };
@@ -177,7 +177,7 @@ export const StarComparisonView = () => {
     return (
       <div className="star-comparison-view">
         <div className="comparison-header">
-          <h3>Compare Apartment Features</h3>
+          <h3>Compare Attributes</h3>
         </div>
         <div className="empty-state">
           <p>Select apartments or rate some to see comparison</p>
@@ -189,13 +189,13 @@ export const StarComparisonView = () => {
   return (
     <div className="star-comparison-view">
       <div className="comparison-header">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="comparison-top">
           <div>
-            <h3>Compare Apartment Features</h3>
+            <h3>Compare Attributes</h3>
             <p className="comparison-subtitle">Comparing {apartmentsToCompare.length} apartments</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <label htmlFor="max-apartments" style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+            <label htmlFor="max-apartments" style={{ fontSize: '0.8rem', color: '#6b7280' }}>
               Show:
             </label>
             <select
@@ -203,8 +203,8 @@ export const StarComparisonView = () => {
               value={maxApartments}
               onChange={(e) => setMaxApartments(Number(e.target.value))}
               style={{
-                padding: '0.25rem 0.5rem',
-                fontSize: '0.875rem',
+                padding: '0.25rem',
+                fontSize: '0.8rem',
                 border: '1px solid #d1d5db',
                 borderRadius: '4px',
                 background: 'white',
@@ -217,30 +217,15 @@ export const StarComparisonView = () => {
             </select>
           </div>
         </div>
-      </div>
-      <div className="star-controls">
-        <div className="star-controls-header">
-          <strong>Attributes (max 7)</strong>
-          <div className="preset-buttons" style={{gap:'0.5rem'}}>
-            <button
-              type="button"
-              onClick={() => setStarAttributes([])}
-              aria-label="Clear all attributes"
-            >Clear All</button>
-            <button
-              type="button"
-              onClick={() => resetStarAttributes()}
-              aria-label="Restore default attributes"
-            >Defaults</button>
+        <div className="star-controls">
           </div>
-        </div>
-        <AttributeMultiSelect
-          candidates={dynamicCandidates}
-          selected={attributes}
-          onToggle={toggleStarAttribute}
-          disabledAdd={disabledAdd}
-        />
-      </div>
+            <AttributeMultiSelect
+              candidates={dynamicCandidates}
+              selected={attributes}
+              onToggle={toggleStarAttribute}
+              disabledAdd={disabledAdd}
+            />
+          </div>
       <Plot
         data={traces}
         layout={layout}

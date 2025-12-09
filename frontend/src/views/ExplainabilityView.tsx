@@ -290,22 +290,6 @@ export const ExplainabilityView = () => {
         />
       ) : (
         <div className="explainability-content">
-          <div style={{ 
-            padding: '12px', 
-            backgroundColor: '#e7f3ff', 
-            borderRadius: '6px', 
-            marginBottom: '12px',
-            border: '1px solid #bee5eb',
-            fontSize: '0.9em'
-          }}>
-            <strong>📊 How to Read This Chart:</strong>
-            <ul style={{ marginTop: '6px', marginBottom: '0', paddingLeft: '20px' }}>
-              <li>Each bar shows how strongly the model <em>prefers</em> a feature for you.</li>
-              <li>Green = features that you liked</li>
-              <li>Red = features that you disliked</li>
-              <li>Longer bars = stronger influence on how apartments are ranked</li>
-            </ul>
-          </div>
           <div className="chart-container">
             <Plot
               data={traces}

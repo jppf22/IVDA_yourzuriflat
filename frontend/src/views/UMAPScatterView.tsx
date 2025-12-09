@@ -7,7 +7,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import Plot from 'react-plotly.js';
 import { useAppStore } from '../store/useAppStore';
-import { usePCA, useApartments, useRecommendationsSubset } from '../api/hooks';
+import { usePCA, useApartments } from '../api/hooks';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorMessage } from '../components/ErrorMessage';
 import {
@@ -69,7 +69,7 @@ const AttributeMultiSelect = ({ candidates, selected, onChange }: AttributeMulti
     [candidates, filter]
   );
   return (
-    <div className="attr-multiselect" ref={containerRef} style={{ minWidth: '240px' }}>
+    <div className="attr-multiselect" ref={containerRef}>
       <div
         className="selected-tags"
         role="button"
@@ -153,24 +153,12 @@ export const UMAPScatterView = () => {
     brushedApartmentIds,
     setBrushedApartmentIds,
     openDetailDrawer,
-    sessionId,
-    ratingsCount,
   } = useAppStore();
   const attributes = pcaAttributes.length
     ? pcaAttributes
     : ['price', 'distance_from_city_center'];
 
   const [colorMode, setColorMode] = useState<'topic' | 'recommendation'>('topic');
-  const [plotHeight, setPlotHeight] = useState(800);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  // Check recommendations within brushed selection
-  const { data: subsetRecommendations } = useRecommendationsSubset(
-    sessionId,
-    brushedApartmentIds,
-    ratingsCount
-  );
-  const isModelTrained = ratingsCount >= 5;
 
   // Dynamic candidate list derived from first recommendation
   const dynamicCandidates = useMemo(() => {
@@ -198,22 +186,6 @@ export const UMAPScatterView = () => {
     effectiveForPCA,
     filterOutliers
   );
-  
-  // Dynamically calculate plot height based on data range
-  useEffect(() => {
-    if (pcaData && pcaData.points && pcaData.points.length > 0) {
-      const yValues = pcaData.points.map(p => p.y);
-      const minY = Math.min(...yValues);
-      const maxY = Math.max(...yValues);
-      const range = maxY - minY;
-      
-      // Calculate height based on y-axis range with minimum and maximum bounds
-      // Use a scaling factor to make the plot taller for larger ranges
-      const scaleFactor = 40; // pixels per unit of y-range
-      const calculatedHeight = Math.max(600, Math.min(1400, range * scaleFactor + 300));
-      setPlotHeight(Math.round(calculatedHeight));
-    }
-  }, [pcaData]);
   
   // Fetch filtered apartments (includes selection subset if active) for single-attribute distribution
   const { data: apartmentsData } = useApartments();
@@ -274,7 +246,7 @@ export const UMAPScatterView = () => {
   };
 
   // 0 attributes selected: instruction state
-  if (attributes.length === 0) {
+  if (attributes.length === 0 || attributes.length === 1) {
     return (
       <div className="pca-scatter-view">
         <div className="scatter-header">
@@ -296,87 +268,8 @@ export const UMAPScatterView = () => {
           </div>
         </div>
         <div className="empty-state">
-          <p>Select at least one attribute (1 = distribution, 2 = raw scatter, more than 2 = UMAP with topics).</p>
+          <p>Select at least two attribute (2 = raw scatter, more than 2 = UMAP with topics).</p>
         </div>
-      </div>
-    );
-  }
-
-  // Single attribute distribution mode
-  if (attributes.length === 1 && singleAttr) {
-    const pointStyles = distPoints.map(p => deriveMarkerStyle(p.id));
-    const trace: Data = {
-      type: 'scatter',
-      mode: 'markers',
-      x: distPoints.map(p=>p.x),
-      y: distPoints.map(p=>p.y),
-      marker: {
-        size: 9,
-        color: pointStyles.map(style => style.color),
-        opacity: pointStyles.map(style => style.opacity),
-        line: {
-          color: pointStyles.map(style => style.lineColor),
-          width: pointStyles.map(style => style.lineWidth),
-        },
-      },
-      text: distPoints.map(p => {
-        const a = p.apt as Apartment;
-        const val = getVal(a as unknown as Record<string, unknown>);
-        return `<b>${a.name}</b><br>${singleAttr}: ${val}<br>${a.property_type}<br>${a.room_type}`;
-      }),
-      hoverinfo: 'text',
-      customdata: distPoints.map(p=>p.id),
-    };
-    const layout: Partial<Layout> = {
-      xaxis: { title: { text: singleAttr } },
-      yaxis: { title: { text: '' }, showticklabels: false },
-      height: 500,
-      margin: { t: 40, b: 60, l: 60, r: 40 },
-      hovermode: 'closest',
-      dragmode: 'select',
-    };
-    const handleClick = (data: unknown) => {
-      const evt = data as { points?: Array<{ customdata?: string }> };
-      if (evt.points && evt.points.length>0) {
-        const id = evt.points[0].customdata;
-        if (id) openDetailDrawer(id);
-      }
-    };
-    const handleSelect = (data: unknown) => {
-      const evt = data as { points?: Array<{ customdata?: string }> };
-      if (evt.points) {
-        const ids = evt.points.map(p=>p.customdata).filter(Boolean) as string[];
-        setBrushedApartmentIds(ids);
-      }
-    };
-    return (
-      <div className="pca-scatter-view">
-        <div className="scatter-header">
-          <h3>Attribute Distribution ({singleAttr})</h3>
-          <div className="scatter-controls">
-            <AttributeMultiSelect
-              candidates={dynamicCandidates}
-              selected={attributes}
-              onChange={next => setPcaAttributes(next)}
-            />
-            <button
-              type="button"
-              className="reset-selection-btn"
-              onClick={() => setBrushedApartmentIds([])}
-              disabled={brushedApartmentIds.length === 0}
-            >
-              Reset Selection{brushedApartmentIds.length>0?` (${brushedApartmentIds.length})`:''}
-            </button>
-          </div>
-        </div>
-        <Plot
-          data={[trace]}
-          layout={layout}
-          config={{ displayModeBar: true, displaylogo: false }}
-          onClick={handleClick}
-          onSelected={handleSelect}
-          style={{ width: '100%', height: '100%' }}
-        />
       </div>
     );
   }
@@ -624,8 +517,9 @@ export const UMAPScatterView = () => {
     yaxis: attributes.length > 2 && mode === 'umap'
       ? { title: { text: '' }, showticklabels: false, ticks: '', showline: false, zeroline: false }
       : { title: { text: y_label || 'UMAP 2' } },
-    height: plotHeight,
-    margin: { t: 50, b: 80, l: 80, r: 40 },
+    // Compact margins so the full plot (including bottom axis)
+    // fits comfortably within the available vertical space
+    margin: { t: 30, b: 60, l: 70, r: 30 },
     hovermode: 'closest',
     dragmode: 'select',
     showlegend: false,
@@ -655,25 +549,15 @@ export const UMAPScatterView = () => {
   };
 
   return (
-    <div className="pca-scatter-view" ref={containerRef}>
+    <div className="pca-scatter-view">
       <div className="scatter-header">
         <h3>Discover Similar Apartments</h3>
         {mode === 'umap' && attributes.length > 2 && (
           <div className="pca-info" style={{ 
-            fontSize: '0.9em', 
+            fontSize: '0.8em', 
             color: '#666', 
-            marginTop: '4px',
-            marginBottom: '8px'
           }}>
             <strong>Analyzing {attributes.length} attributes:</strong> {attributes.join(', ')}
-            <div style={{ marginTop: '4px' }}>
-              <span style={{ fontWeight: 'bold', color: '#2c3e50' }}>
-                📊 UMAP projection with topic modeling
-              </span>
-              <span style={{ marginLeft: '8px', fontSize: '0.85em', color: '#7f8c8d', fontStyle: 'italic' }}>
-                (Non-linear mapping preserving local structure - similar apartments cluster together)
-              </span>
-            </div>
           </div>
         )}
         {mode === 'raw' && attributes.length === 2 && (
@@ -699,7 +583,7 @@ export const UMAPScatterView = () => {
                 <select 
                   value={colorMode} 
                   onChange={(e) => setColorMode(e.target.value as 'topic' | 'recommendation')}
-                  style={{ marginLeft: '8px' }}
+                  style={{ marginLeft: '0.25rem' }}
                 >
                   <option value="topic">Topic</option>
                   <option value="recommendation">Recommendation</option>
@@ -707,20 +591,20 @@ export const UMAPScatterView = () => {
               </label>
             </div>
           )}
-          <div className="control-group">
-            <label>
-              <input
-                type="checkbox"
-                checked={filterOutliers}
-                onChange={e => setFilterOutliers(e.target.checked)}
-              />
-              Filter Outliers
-            </label>
-          </div>
-          {brushedApartmentIds.length > 0 && isModelTrained && subsetRecommendations && subsetRecommendations.total_in_subset > 0 && (
-            <div className="recommendations-badge" title={`${subsetRecommendations.total_in_subset} top recommendations in selected area`}>
-              <span className="badge-icon">⭐</span>
-              <span className="badge-text">{subsetRecommendations.total_in_subset} recommended</span>
+          {attributes.length <= 2 && (
+            <div className="control-group">
+              <button
+                type="button"
+                className={`toggle-outliers-btn ${filterOutliers ? 'active' : ''}`}
+                onClick={() => setFilterOutliers(!filterOutliers)}
+                title={
+                  filterOutliers
+                    ? 'Allow outliers back into the view'
+                    : 'Filter outliers to focus on the main clusters'
+                }
+              >
+                {filterOutliers ? 'Allow Outliers' : 'Filter Outliers'}
+              </button>
             </div>
           )}
           <button
@@ -785,42 +669,43 @@ export const UMAPScatterView = () => {
           </div>
         </div>
       )}
-      
-      {hasSelection ? (
-        <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h4 style={{ marginBottom: '4px' }}>Focused Selection</h4>
-            <Plot
-              data={[selectionBaseTrace, selectionTopTrace]}
-              layout={{ ...baseLayout }}
-              config={{ displayModeBar: true, displaylogo: false }}
-              onClick={handlePlotlyClick}
-              onSelected={handlePlotlySelected}
-              style={{ width: '100%', height: '100%' }}
-            />
+      <div className="scatter-plot-container">
+        {hasSelection ? (
+          <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch', height: '100%' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h4 style={{ marginBottom: '4px' }}>Focused Selection</h4>
+              <Plot
+                data={[selectionBaseTrace, selectionTopTrace]}
+                layout={{ ...baseLayout }}
+                config={{ displayModeBar: true, displaylogo: false }}
+                onClick={handlePlotlyClick}
+                onSelected={handlePlotlySelected}
+                style={{ width: '100%', height: '100%' }}
+              />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h4 style={{ marginBottom: '4px' }}>Global Overview</h4>
+              <Plot
+                data={[globalBaseTrace, globalTopTrace]}
+                layout={{ ...baseLayout }}
+                config={{ displayModeBar: true, displaylogo: false }}
+                onClick={handlePlotlyClick}
+                onSelected={handlePlotlySelected}
+                style={{ width: '100%', height: '100%' }}
+              />
+            </div>
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h4 style={{ marginBottom: '4px' }}>Global Overview</h4>
-            <Plot
-              data={[globalBaseTrace, globalTopTrace]}
-              layout={{ ...baseLayout }}
-              config={{ displayModeBar: true, displaylogo: false }}
-              onClick={handlePlotlyClick}
-              onSelected={handlePlotlySelected}
-              style={{ width: '100%', height: '100%' }}
-            />
-          </div>
-        </div>
-      ) : (
-        <Plot
-          data={[globalBaseTrace, globalTopTrace]}
-          layout={baseLayout}
-          config={{ displayModeBar: true, displaylogo: false }}
-          onClick={handlePlotlyClick}
-          onSelected={handlePlotlySelected}
-          style={{ width: '100%', height: '100%' }}
-        />
-      )}
+        ) : (
+          <Plot
+            data={[globalBaseTrace, globalTopTrace]}
+            layout={baseLayout}
+            config={{ displayModeBar: true, displaylogo: false }}
+            onClick={handlePlotlyClick}
+            onSelected={handlePlotlySelected}
+            style={{ width: '100%', height: '100%' }}
+          />
+        )}
+      </div>
     </div>
   );
 };

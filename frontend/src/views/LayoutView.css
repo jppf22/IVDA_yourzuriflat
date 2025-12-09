@@ -91,8 +91,8 @@
   display: flex;
   flex: 1;
   overflow: auto;
-  gap: 1rem;
-  padding: 1rem;
+  gap: 0.5rem;
+  padding: 0.5rem;
   min-height: 0;
 }
 
@@ -121,42 +121,30 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.5rem;
   overflow-y: auto;
   overflow-x: hidden;
 }
 
 .section-recommended {
-  height: 600px;
+  height: 42%;
   overflow: hidden;
-  flex: 0 0 600px;
+  flex: 0 0 42%;
 }
 
 .section-visualizations {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.25rem;
   flex: 0 0 auto;
-  min-height: 600px;
+  height: 56%;
   margin-bottom: 1rem;
 }
 
 .viz-panel {
   flex: 0 0 auto;
   display: block;
-}
-
-.section-analysis {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  min-height: 600px;
-  flex: 0 0 auto;
-  margin-top: 1rem;
-}
-
-.analysis-panel {
-  overflow: auto;
-  max-height: 800px;
+  overflow: hidden;
 }
 
 /* Scrollbar styling */
@@ -187,6 +175,7 @@
 }
 
 /* Responsive adjustments for laptop screens */
+/*
 @media (max-width: 1600px) {
   .section-visualizations,
   .section-analysis {
@@ -209,3 +198,4 @@
     height: 350px;
   }
 }
+  */
