@@ -306,8 +306,14 @@ export const MapView = () => {
     height: isMapExpanded ? Math.max(window.innerHeight - 140, 400) : 300,
     margin: { t: 0, b: 0, l: 0, r: 0 },
     hovermode: 'closest',
-    dragmode: dragMode,
+    dragmode: isMapExpanded ? dragMode : 'pan',
     showlegend: false,
+    hoverlabel: {
+      font: {
+        // Smaller tooltips in embedded view, larger in expanded view
+        size: isMapExpanded ? 13 : 10,
+      },
+    },
   };
 
   const handlePlotlyClick = (data: unknown) => {
@@ -408,6 +414,7 @@ export const MapView = () => {
             </button>
           )}
         </div>
+        {isMapExpanded && (
         <div className="map-controls">
           {selectedClusterId !== null && (
             <div className="cluster-filter-badge">
@@ -526,12 +533,13 @@ export const MapView = () => {
             <span>Recenter</span>
           </button>
         </div>
+        )}
       </div>
       <Plot
         data={traces}
         layout={layout}
         config={{ 
-          displayModeBar: true, 
+          displayModeBar: isMapExpanded, 
           displaylogo: false,
           scrollZoom: true,
           modeBarButtonsToAdd: [],

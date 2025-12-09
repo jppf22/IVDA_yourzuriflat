@@ -14,7 +14,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
 }
 
 .filter-panel.collapsed .filter-panel-header {
@@ -23,7 +23,7 @@
 
 .filter-panel-header h3 {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: 1rem;
   color: #1f2937;
 }
 
@@ -44,7 +44,7 @@
 .filter-panel-content {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 0.5rem;
 }
 
 .filter-group {
