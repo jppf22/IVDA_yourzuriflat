@@ -158,7 +158,7 @@ export const LayoutView = () => {
         <div className="header-info">
           <span className="ratings-count">Ratings: {ratingsCount}</span>
           <span className="session-id" title={sessionId}>
-            Session: {sessionId.substring(0, 12)}...
+            Session: {sessionId}
           </span>
         </div>
       </header>
