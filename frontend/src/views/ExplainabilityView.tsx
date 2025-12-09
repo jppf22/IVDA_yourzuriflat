@@ -233,13 +233,13 @@ export const ExplainabilityView = () => {
   // Count unique features to calculate dynamic height
   const uniqueFeatures = new Set(traces.flatMap((trace) => (trace.y as string[]) || []));
   const featureCount = uniqueFeatures.size;
-  // Dynamic height: 25px per feature + base margins (min 280px, max 380px)
-  const dynamicHeight = Math.max(280, Math.min(380, featureCount * 25 + 100));
+  // Dynamic height: 40px per feature + base margins (min 400px, max 900px)
+  const dynamicHeight = Math.max(400, Math.min(900, featureCount * 40 + 150));
 
   const layout: Partial<Layout> = {
     barmode: 'relative',
     height: dynamicHeight,
-    margin: { t: 30, b: 50, l: 200, r: 100 },  // Reduced margins for compact view
+    margin: { t: 40, b: 60, l: 280, r: 120 },  // Increased right margin for long bars with labels
     xaxis: { 
       title: { text: 'Contribution to Predicted Score' }, 
       zeroline: true,

@@ -3,28 +3,23 @@
 ## Quick Start (First Time Setup)
 
 ```pwsh
-# 1. Setup Python environment - USE CONDA (preferred)
+# 1. Setup Python environment (Windows PowerShell)
 cd backend
-conda env create -f ../environment.yml  # Creates IVDA_GROUP environment
-conda activate IVDA_GROUP
-pip install -r requirements.txt  # Install additional dependencies
-
-# OR use venv (alternative)
 python.exe -m venv venv
 .\venv\Scripts\activate
-pip install -r requirements.txt
 
 # 2. Start backend
+pip install -r requirements.txt
 uvicorn app.main:app --reload  # Runs at http://localhost:8000
 
 # 3. Start frontend (new terminal)
 cd frontend
+cp .env.example .env  # Edit if backend URL differs
 npm install
 npm run dev  # Runs at http://localhost:5173
 ```
 
 **Data loads automatically** on backend startup from `backend/Notebooks/listings_clean.json` (2348 apartments).
-**Environment**: Conda environment named `IVDA_GROUP` (Python 3.10) - ALWAYS activate before running backend commands.
 
 ## Project Purpose
 Interactive Visual Data Analysis (IVDA) tool for Zurich apartment rentals. **Content-based recommendation system** using cosine similarity to learn user preferences from ratings. **Always align changes with IVDA tasks T1-T6** (identify, compare, explain, calibrate, explore, relate apartments - see `AGENT.md` section 2.3).
@@ -89,17 +84,10 @@ Key type contracts:
 ### Start Backend (Windows PowerShell)
 ```pwsh
 cd backend
-conda activate IVDA_GROUP  # CRITICAL: Always activate conda env first
+conda activate IVDA_GROUP  # Or your preferred Python env
 uvicorn app.main:app --reload
 ```
 Backend runs at `http://localhost:8000` | Docs at `http://localhost:8000/docs`
-
-**Alternative with venv**: 
-```pwsh
-cd backend
-.\venv\Scripts\activate  # If using venv instead of conda
-uvicorn app.main:app --reload
-```
 
 ### Start Frontend
 ```pwsh
@@ -109,10 +97,10 @@ npm run dev
 Frontend runs at `http://localhost:5173`
 
 ### Environment Variables
-- **Frontend**: `.env.example` provided, copy to `.env` if needed (optional - defaults to `http://localhost:8000`):
+- **Frontend**: Copy `.env.example` to `.env` (optional - defaults to `http://localhost:8000`):
   ```pwsh
   cd frontend
-  cp .env.example .env  # Only if you need to change backend URL
+  cp .env.example .env
   ```
 - **Backend**: No environment variables required - CORS origins hardcoded in `app/main.py` (ports 5173, 3000)
 

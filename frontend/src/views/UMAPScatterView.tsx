@@ -2,11 +2,9 @@
  * UMAP Scatter View (T6 - Relate apartment attributes)
  * Visualizes apartments in 2D space using UMAP dimensionality reduction with topic modeling
  * Topics provide semantic clustering for better non-expert interpretability
- * Supports expandable overlay mode (minimized/full screen)
  */
 
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import Plot from 'react-plotly.js';
 import { useAppStore } from '../store/useAppStore';
 import { usePCA, useApartments, useRecommendationsSubset } from '../api/hooks';
@@ -47,10 +45,6 @@ const TOPIC_COLORS = [
   '#bcbd22', // olive
   '#17becf', // cyan
 ];
-
-interface UMAPScatterViewProps {
-  isGlobalView?: boolean;
-}
 
 interface AttributeMultiSelectProps {
   candidates: string[];
@@ -148,7 +142,7 @@ const AttributeMultiSelect = ({ candidates, selected, onChange }: AttributeMulti
   );
 };
 
-export const UMAPScatterView = ({ isGlobalView = false }: UMAPScatterViewProps) => {
+export const UMAPScatterView = () => {
   const {
     pcaAttributes,
     setPcaAttributes,
@@ -161,30 +155,14 @@ export const UMAPScatterView = ({ isGlobalView = false }: UMAPScatterViewProps) 
     openDetailDrawer,
     sessionId,
     ratingsCount,
-    isUMAPExpanded,
-    toggleUMAPExpanded,
-    setUMAPExpanded,
   } = useAppStore();
   const attributes = pcaAttributes.length
     ? pcaAttributes
     : ['price', 'distance_from_city_center'];
 
   const [colorMode, setColorMode] = useState<'topic' | 'recommendation'>('topic');
-  const [plotHeight, setPlotHeight] = useState(isGlobalView ? 350 : 350);
+  const [plotHeight, setPlotHeight] = useState(800);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!isUMAPExpanded) {
-      setPlotHeight(350);
-      return;
-    }
-    setPlotHeight(Math.max(window.innerHeight - 200, 500));
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [isUMAPExpanded]);
 
   // Check recommendations within brushed selection
   const { data: subsetRecommendations } = useRecommendationsSubset(
@@ -535,10 +513,6 @@ export const UMAPScatterView = ({ isGlobalView = false }: UMAPScatterViewProps) 
   const hasSelection = brushedApartmentIds.length > 0;
   const brushedIdSet = new Set(brushedApartmentIds.map(id => String(id)));
 
-  // For global view: show all data without dimming
-  // For filtered view: dim non-brushed points when there's a selection
-  const shouldDimNonBrushed = !isGlobalView && hasSelection;
-
   // Global traces (all points) with brushed IDs highlighted in the right-hand view
   const globalBaseXs: number[] = [];
   const globalBaseYs: number[] = [];
@@ -574,20 +548,19 @@ export const UMAPScatterView = ({ isGlobalView = false }: UMAPScatterViewProps) 
       globalTopYs.push(p.y);
       globalTopColors.push(style.color);
       globalTopOpacities.push(1);
-      // Highlight brushed top-5 in filtered view only
-      globalTopLineColors.push(!isGlobalView && isInBrush && hasSelection ? '#000000' : style.lineColor);
-      globalTopLineWidths.push(!isGlobalView && isInBrush && hasSelection ? 2 : style.lineWidth > 0 ? style.lineWidth : 2);
+      // Highlight brushed top-5 consistently with other brushed points
+      globalTopLineColors.push(isInBrush && hasSelection ? '#000000' : style.lineColor);
+      globalTopLineWidths.push(isInBrush && hasSelection ? 2 : style.lineWidth > 0 ? style.lineWidth : 2);
       globalTopTexts.push(text);
       globalTopIds.push(id);
     } else {
       globalBaseXs.push(p.x);
       globalBaseYs.push(p.y);
       globalBaseColors.push(style.color);
-      // In global view: show all points normally
-      // In filtered view: dim non-brushed points when there's a selection
-      globalBaseOpacities.push(shouldDimNonBrushed && !isInBrush ? 0.1 : style.opacity);
-      globalBaseLineColors.push(!isGlobalView && isInBrush ? '#000000' : 'rgba(0,0,0,0)');
-      globalBaseLineWidths.push(!isGlobalView && isInBrush ? 2 : 0);
+      // Strongly dim non-brushed points, give brushed ones a clear black outline
+      globalBaseOpacities.push(isInBrush || !hasSelection ? style.opacity : 0.1);
+      globalBaseLineColors.push(isInBrush ? '#000000' : 'rgba(0,0,0,0)');
+      globalBaseLineWidths.push(isInBrush ? 2 : 0);
       globalBaseTexts.push(text);
       globalBaseIds.push(id);
     }
@@ -654,7 +627,7 @@ export const UMAPScatterView = ({ isGlobalView = false }: UMAPScatterViewProps) 
     height: plotHeight,
     margin: { t: 50, b: 80, l: 80, r: 40 },
     hovermode: 'closest',
-    dragmode: isGlobalView ? 'pan' : 'select',
+    dragmode: 'select',
     showlegend: false,
     autosize: true,
   };
@@ -667,9 +640,6 @@ export const UMAPScatterView = ({ isGlobalView = false }: UMAPScatterViewProps) 
     }
   };
   const handlePlotlySelected = (data: unknown) => {
-    // Only allow selection in filtered view, not in global view
-    if (isGlobalView) return;
-    
     const eventData = data as { points?: Array<{ customdata?: string }> };
     if (!eventData || !eventData.points) return;
 
@@ -684,50 +654,10 @@ export const UMAPScatterView = ({ isGlobalView = false }: UMAPScatterViewProps) 
     }
   };
 
-  const umapContent = (
+  return (
     <div className="pca-scatter-view" ref={containerRef}>
       <div className="scatter-header">
-        <h3>{isGlobalView ? 'Global Data Distribution' : 'Filtered View'}</h3>
-        {isGlobalView && (
-          <div className="pca-info" style={{ 
-            fontSize: '0.85em', 
-            color: '#666', 
-            marginTop: '4px',
-            fontStyle: 'italic'
-          }}>
-            Shows all apartments - use pan to explore
-          </div>
-        )}
-        {!isGlobalView && !hasSelection && (
-          <div className="pca-info" style={{ 
-            fontSize: '0.85em', 
-            color: '#666', 
-            marginTop: '4px',
-            fontStyle: 'italic'
-          }}>
-            Use lasso/box select to filter apartments
-          </div>
-        )}
-        {!isGlobalView && hasSelection && (
-          <div className="pca-info" style={{ 
-            fontSize: '0.85em', 
-            color: '#2980b9', 
-            marginTop: '4px',
-            fontWeight: '500'
-          }}>
-            Showing {brushedApartmentIds.length} selected apartments
-          </div>
-        )}
-        {!isGlobalView && isUMAPExpanded && (
-          <button className="umap-collapse-button" onClick={toggleUMAPExpanded} title="Minimize UMAP">
-            ✕
-          </button>
-        )}
-        {!isGlobalView && !isUMAPExpanded && (
-          <button className="umap-expand-button-small" onClick={toggleUMAPExpanded} title="Expand UMAP">
-            ⛶
-          </button>
-        )}
+        <h3>Discover Similar Apartments</h3>
         {mode === 'umap' && attributes.length > 2 && (
           <div className="pca-info" style={{ 
             fontSize: '0.9em', 
@@ -856,28 +786,32 @@ export const UMAPScatterView = ({ isGlobalView = false }: UMAPScatterViewProps) 
         </div>
       )}
       
-      {isGlobalView ? (
-        // Global view: always show all data without split view
-        <Plot
-          data={[globalBaseTrace, globalTopTrace]}
-          layout={baseLayout}
-          config={{ displayModeBar: true, displaylogo: false }}
-          onClick={handlePlotlyClick}
-          onSelected={handlePlotlySelected}
-          style={{ width: '100%', height: '100%' }}
-        />
-      ) : hasSelection ? (
-        // Filtered view: show focused selection when brushing is active
-        <Plot
-          data={[selectionBaseTrace, selectionTopTrace]}
-          layout={{ ...baseLayout }}
-          config={{ displayModeBar: true, displaylogo: false }}
-          onClick={handlePlotlyClick}
-          onSelected={handlePlotlySelected}
-          style={{ width: '100%', height: '100%' }}
-        />
+      {hasSelection ? (
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h4 style={{ marginBottom: '4px' }}>Focused Selection</h4>
+            <Plot
+              data={[selectionBaseTrace, selectionTopTrace]}
+              layout={{ ...baseLayout }}
+              config={{ displayModeBar: true, displaylogo: false }}
+              onClick={handlePlotlyClick}
+              onSelected={handlePlotlySelected}
+              style={{ width: '100%', height: '100%' }}
+            />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h4 style={{ marginBottom: '4px' }}>Global Overview</h4>
+            <Plot
+              data={[globalBaseTrace, globalTopTrace]}
+              layout={{ ...baseLayout }}
+              config={{ displayModeBar: true, displaylogo: false }}
+              onClick={handlePlotlyClick}
+              onSelected={handlePlotlySelected}
+              style={{ width: '100%', height: '100%' }}
+            />
+          </div>
+        </div>
       ) : (
-        // Filtered view: show all data when no brushing
         <Plot
           data={[globalBaseTrace, globalTopTrace]}
           layout={baseLayout}
@@ -889,25 +823,6 @@ export const UMAPScatterView = ({ isGlobalView = false }: UMAPScatterViewProps) 
       )}
     </div>
   );
-
-  // Only filtered view supports expand functionality
-  if (!isGlobalView && isUMAPExpanded) {
-    return createPortal(
-      <div 
-        className="umap-view umap-expanded"
-        onClick={(event) => {
-          if (isUMAPExpanded && event.target === event.currentTarget) {
-            setUMAPExpanded(false);
-          }
-        }}
-      >
-        {umapContent}
-      </div>,
-      document.body
-    );
-  }
-
-  return umapContent;
 };
 
 export default UMAPScatterView;
