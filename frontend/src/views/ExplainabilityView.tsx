@@ -110,14 +110,14 @@ export const ExplainabilityView = () => {
   const positiveTrace: Data = {
     type: 'bar',
     name: 'Preferred features',
-    x: positive.map((p) => p.weight),
-    y: positive.map((p) => p.feature_name),
+    x: positive.map((p) => Math.abs(p.weight)),
+    y: positive.map((p) => p.feature_name.slice(5).replace(/_/g, " ")),
     orientation: 'h',
     marker: {
       color: '#2b8a3e',
       opacity: 0.9,
     },
-    text: positive.map((p) => `+${p.weight.toFixed(3)}`),
+    //text: positive.map((p) => `+${p.weight.toFixed(3)}`),
     textposition: 'auto',
     hovertemplate: '<b>%{y}</b><br>Weight: +%{x:.3f}<extra></extra>',
     showlegend: true,
@@ -126,16 +126,16 @@ export const ExplainabilityView = () => {
   const negativeTrace: Data = {
     type: 'bar',
     name: 'Less preferred features',
-    x: negative.map((p) => p.weight),
-    y: negative.map((p) => p.feature_name),
+    x: negative.map((p) => Math.abs(p.weight)),
+    y: negative.map((p) => p.feature_name.slice(5).replace(/_/g, " ")),
     orientation: 'h',
     marker: {
       color: '#e03131',
       opacity: 0.8,
     },
-    text: negative.map((p) => p.weight.toFixed(3)),
+    //text: negative.map((p) => p.weight.toFixed(3)),
     textposition: 'auto',
-    hovertemplate: '<b>%{y}</b><br>Weight: %{x:.3f}<extra></extra>',
+    hovertemplate: '<b>%{y}</b><br>Weight: -%{x:.3f}<extra></extra>',
     showlegend: true,
   };
 
@@ -145,7 +145,7 @@ export const ExplainabilityView = () => {
   const minWeight = Math.min(...allWeights, 0);
   const maxWeight = Math.max(...allWeights, 0);
   const maxAbs = Math.max(Math.abs(minWeight), Math.abs(maxWeight));
-  const xAxisRange: [number, number] = [-maxAbs * 1.1, maxAbs * 1.1];
+  const xAxisRange: [number, number] = [0, maxAbs * 1.1];
 
   const featureCount = displayedPairs.length || featureNames.length;
   const dynamicHeight = Math.max(400, Math.min(900, featureCount * 30 + 150));
@@ -301,9 +301,9 @@ export const ExplainabilityView = () => {
             <strong>📊 How to Read This Chart:</strong>
             <ul style={{ marginTop: '6px', marginBottom: '0', paddingLeft: '20px' }}>
               <li>Each bar shows how strongly the model <em>prefers</em> a feature for you.</li>
-              <li>Green bars (right) = features the model associates with apartments you like.</li>
-              <li>Red bars (left) = features that tend to lower the score for you.</li>
-              <li>Longer bars = stronger influence on how apartments are ranked.</li>
+              <li>Green = features that you liked</li>
+              <li>Red = features that you disliked</li>
+              <li>Longer bars = stronger influence on how apartments are ranked</li>
             </ul>
           </div>
           <div className="chart-container">

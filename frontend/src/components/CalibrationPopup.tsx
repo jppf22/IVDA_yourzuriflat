@@ -216,6 +216,10 @@ export const CalibrationPopup = () => {
           To get started, please rate <strong>at least ONE</strong> of these diverse apartments. 
           This helps our recommendation system understand your preferences!
         </p>
+        <p className="subtitle">
+          <strong>HINT:</strong> Stronger ratings shape your recommendations more.
+          Give 4★–5★ to places you truly like and 1★ to those you want the system to avoid.
+        </p>
 
         <div className="apartments-grid">
           {DIVERSE_APARTMENT_IDS.map((apartmentId) => (
