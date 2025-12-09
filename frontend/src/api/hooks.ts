@@ -236,15 +236,16 @@ export const usePCA = (
 export const useExplainability = (sessionId: string, apartmentIds?: string[], modelTrained?: boolean) => {
   const { ratingsCount, syncComplete } = useAppStore();
   const isModelReady = modelTrained ?? (ratingsCount >= 5);
-  
+
   return useQuery<ExplainabilityResponse>({
     queryKey: queryKeys.explainability(sessionId, apartmentIds),
     queryFn: () =>
       apiClient.get<ExplainabilityResponse>('/explainability', {
         session_id: sessionId,
-        apartment_ids: apartmentIds?.join(','),
+        apartment_ids: apartmentIds && apartmentIds.length > 0 ? apartmentIds.join(',') : undefined,
       }),
-    enabled: !!sessionId && apartmentIds !== undefined && apartmentIds.length > 0 && isModelReady && syncComplete,
+    // Allow fetching coefficients even when no specific apartments are provided
+    enabled: !!sessionId && isModelReady && syncComplete,
     staleTime: 0,
   });
 };

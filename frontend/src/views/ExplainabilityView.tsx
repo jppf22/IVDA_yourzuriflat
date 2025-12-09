@@ -7,25 +7,20 @@
 import React from 'react';
 import Plot from 'react-plotly.js';
 import type { AxiosError } from 'axios';
-import type { Apartment } from '../api/types';
 import { useAppStore } from '../store/useAppStore';
 import { useExplainability, useSnapshots } from '../api/hooks';
-import apiClient from '../api/client';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorMessage } from '../components/ErrorMessage';
-import { CONTRIBUTION_COLORS, TOP_COLORS, getTopColor } from '../utils/colors';
 import type { Data, Layout } from 'plotly.js';
 import './ExplainabilityView.css';
 
 export const ExplainabilityView = () => {
-  const { sessionId, selectedApartmentIds, topRecommendations, ratingsCount } = useAppStore();
+  const { sessionId, ratingsCount } = useAppStore();
 
-  // State for before/after comparison
+  // State for before/after comparison (model evolution)
   const [showComparison, setShowComparison] = React.useState(false);
   const [selectedSnapshot, setSelectedSnapshot] = React.useState<number | null>(null);
-  
-  // State for number of apartments to display
-  const [maxApartments, setMaxApartments] = React.useState(3);
+  const [showAllFeatures, setShowAllFeatures] = React.useState(false);
 
   // Check if model is ready (5+ ratings)
   const isModelReady = ratingsCount >= 5;
@@ -33,66 +28,16 @@ export const ExplainabilityView = () => {
   // Fetch snapshots for comparison
   const { data: snapshotsData } = useSnapshots(sessionId, isModelReady && showComparison);
 
-  // Use selected apartments or top N recommendations based on maxApartments
-  // Return undefined if no apartments available or model not ready
-  const apartmentIds: string[] | undefined = React.useMemo(() => {
-    if (!isModelReady) return undefined;
-    
-    if (selectedApartmentIds.length > 0) {
-      return selectedApartmentIds.slice(0, maxApartments);
-    }
-    
-    const topIds = topRecommendations.slice(0, maxApartments).map((apt) => String(apt.id));
-    return topIds.length > 0 ? topIds : undefined;
-  }, [selectedApartmentIds, topRecommendations, isModelReady, maxApartments]);
-
+  // Fetch explainability based on user vector (coefficients only)
   const { data: explainabilityData, isLoading, isError, error, refetch } = useExplainability(
     sessionId,
-    apartmentIds,
+    undefined,
     isModelReady
   );
 
   const modelNotTrained = Boolean(
     (error as AxiosError<{ detail?: string }> | undefined)?.response?.status === 400
   );
-
-  const [apartmentMap, setApartmentMap] = React.useState<Record<string, Apartment | null>>({});
-
-  // fetch apartment metadata for labels (name) for each apartment id returned
-  React.useEffect(() => {
-    let mounted = true;
-    const fetchApts = async () => {
-      if (!explainabilityData || !explainabilityData.contributions) return;
-      const ids = explainabilityData.contributions.map((c) => c.apartment_id);
-      try {
-        const pairs = await Promise.all(
-          ids.map(async (id) => {
-            try {
-              // Ensure ID is a string and properly formatted
-              const idStr = String(id);
-              const apt = await apiClient.get<Apartment>(`/apartments/${idStr}`);
-              return [id, apt] as const;
-            } catch (err) {
-              console.error(`Failed to fetch apartment ${id}:`, err);
-              return [id, null] as const;
-            }
-          })
-        );
-        if (!mounted) return;
-        const map: Record<string, Apartment | null> = {};
-        for (const [id, apt] of pairs) {
-          map[String(id)] = apt;
-        }
-        setApartmentMap(map);
-      } catch (err) {
-        console.error('Error fetching apartments:', err);
-      }
-    };
-    fetchApts();
-    return () => {
-      mounted = false;
-    };
-  }, [explainabilityData]);
 
   // Show calibration message if model not ready
   if (!isModelReady) {
@@ -110,7 +55,7 @@ export const ExplainabilityView = () => {
   if (isLoading) {
     return (
       <div className="explainability-view">
-        <LoadingSpinner message="Computing feature contributions..." />
+        <LoadingSpinner message="Computing your preference profile..." />
       </div>
     );
   }
@@ -133,126 +78,95 @@ export const ExplainabilityView = () => {
     );
   }
 
-  if (!explainabilityData || !explainabilityData.contributions || explainabilityData.contributions.length === 0) {
+  if (!explainabilityData || !explainabilityData.coefficients || !explainabilityData.coefficients.feature_names?.length) {
     return (
       <div className="explainability-view">
         <div className="empty-state">
-          <p>Rate apartments to see model explanations</p>
+          <p>Rate apartments to see your learned preference profile.</p>
         </div>
       </div>
     );
   }
-
-  // Prepare bar chart data from numeric contributions and feature names
+  // Build user preference profile from coefficients
   const featureNames = explainabilityData.coefficients.feature_names;
-  const topRecommendationIds = topRecommendations.map((apt) => apt.id);
-  
-  const traces: Data[] = explainabilityData.contributions.flatMap((entry, aptIndex) => {
-    const apt = apartmentMap[String(entry.apartment_id)];
-    const aptLabel = apt && apt.name ? `${apt.name.substring(0, 25)}` : `id:${entry.apartment_id}`;
-    
-    // Get color for this apartment based on its rank in recommendations
-    const apartmentColor = getTopColor(topRecommendationIds.indexOf(entry.apartment_id));
-    
-    // Get all contributions with feature names
-    const allPairs = featureNames.map((fname, idx) => ({ 
-      feature_name: fname, 
-      contribution: entry.contributions[idx] || 0 
-    }));
-    
-    // Sort by absolute contribution and take top 12
-    const sortedPairs = allPairs
-      .filter(p => Math.abs(p.contribution) > 0.001) // Filter out near-zero contributions
-      .sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
-      .slice(0, 12);
-    
-    // Split into positive and negative
-    const positive = sortedPairs.filter((c) => c.contribution > 0);
-    const negative = sortedPairs.filter((c) => c.contribution < 0);
+  const coeffs = explainabilityData.coefficients.coef;
 
-    const positiveTrace: Data = {
-      type: 'bar',
-      name: `${aptLabel}`,
-      x: positive.map((c) => c.contribution),
-      y: positive.map((c) => c.feature_name),
-      orientation: 'h',
-      marker: { 
-        color: apartmentColor,
-        opacity: 0.85,
-        line: { 
-          color: apartmentColor, 
-          width: 2 
-        },
-        pattern: {
-          shape: '',  // Solid fill for positive
-        }
-      },
-      text: positive.map((c) => `+${c.contribution.toFixed(3)}`),
-      textposition: 'auto',
-      hovertemplate: `<b>${aptLabel}</b><br>%{y}<br>Contribution: +%{x:.3f}<br><extra></extra>`,
-      legendgroup: `apt${aptIndex}`,
-      showlegend: true,
-    };
+  const allPairs = featureNames.map((name, idx) => ({
+    feature_name: name,
+    weight: coeffs[idx] ?? 0,
+  }));
 
-    const negativeTrace: Data = {
-      type: 'bar',
-      name: `${aptLabel} (negative)`,
-      x: negative.map((c) => c.contribution),
-      y: negative.map((c) => c.feature_name),
-      orientation: 'h',
-      marker: { 
-        color: apartmentColor,
-        opacity: 0.45,  // Lower opacity for negative contributions
-        line: { 
-          color: apartmentColor, 
-          width: 2,
-        },
-        pattern: {
-          shape: '/',  // Diagonal lines for negative
-          size: 4,
-          solidity: 0.3,
-        }
-      },
-      text: negative.map((c) => c.contribution.toFixed(3)),
-      textposition: 'auto',
-      hovertemplate: `<b>${aptLabel}</b><br>%{y}<br>Contribution: %{x:.3f}<br><extra></extra>`,
-      legendgroup: `apt${aptIndex}`,
-      showlegend: false,  // Don't show negative in legend to reduce clutter
-    };
+  // Focus on most important preferences by absolute weight
+  const significant = allPairs
+    .filter((p) => Math.abs(p.weight) > 0.001)
+    .sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight));
 
-    return [positiveTrace, negativeTrace];
-  });
+  // By default show top 10 by absolute weight (regardless of sign)
+  const displayedPairs = showAllFeatures ? significant : significant.slice(0, 10);
 
-  // Calculate x-axis range based on actual contribution values
-  const allContributions = traces.flatMap((trace) => (trace.x as number[]) || []);
-  const minContrib = Math.min(...allContributions, 0);
-  const maxContrib = Math.max(...allContributions, 0);
-  const xRange = Math.max(Math.abs(minContrib), Math.abs(maxContrib));
-  const xAxisRange: [number, number] = [-xRange * 1.1, xRange * 1.1];
+  const positive = displayedPairs.filter((p) => p.weight > 0);
+  const negative = displayedPairs.filter((p) => p.weight < 0);
 
-  // Count unique features to calculate dynamic height
-  const uniqueFeatures = new Set(traces.flatMap((trace) => (trace.y as string[]) || []));
-  const featureCount = uniqueFeatures.size;
-  // Dynamic height: 40px per feature + base margins (min 400px, max 900px)
-  const dynamicHeight = Math.max(400, Math.min(900, featureCount * 40 + 150));
+  const positiveTrace: Data = {
+    type: 'bar',
+    name: 'Preferred features',
+    x: positive.map((p) => p.weight),
+    y: positive.map((p) => p.feature_name),
+    orientation: 'h',
+    marker: {
+      color: '#2b8a3e',
+      opacity: 0.9,
+    },
+    text: positive.map((p) => `+${p.weight.toFixed(3)}`),
+    textposition: 'auto',
+    hovertemplate: '<b>%{y}</b><br>Weight: +%{x:.3f}<extra></extra>',
+    showlegend: true,
+  };
+
+  const negativeTrace: Data = {
+    type: 'bar',
+    name: 'Less preferred features',
+    x: negative.map((p) => p.weight),
+    y: negative.map((p) => p.feature_name),
+    orientation: 'h',
+    marker: {
+      color: '#e03131',
+      opacity: 0.8,
+    },
+    text: negative.map((p) => p.weight.toFixed(3)),
+    textposition: 'auto',
+    hovertemplate: '<b>%{y}</b><br>Weight: %{x:.3f}<extra></extra>',
+    showlegend: true,
+  };
+
+  const traces: Data[] = [positiveTrace, negativeTrace];
+
+  const allWeights = coeffs.length ? coeffs : [0];
+  const minWeight = Math.min(...allWeights, 0);
+  const maxWeight = Math.max(...allWeights, 0);
+  const maxAbs = Math.max(Math.abs(minWeight), Math.abs(maxWeight));
+  const xAxisRange: [number, number] = [-maxAbs * 1.1, maxAbs * 1.1];
+
+  const featureCount = displayedPairs.length || featureNames.length;
+  const dynamicHeight = Math.max(400, Math.min(900, featureCount * 30 + 150));
 
   const layout: Partial<Layout> = {
     barmode: 'relative',
     height: dynamicHeight,
-    margin: { t: 40, b: 60, l: 280, r: 120 },  // Increased right margin for long bars with labels
-    xaxis: { 
-      title: { text: 'Contribution to Predicted Score' }, 
+    margin: { t: 40, b: 60, l: 280, r: 120 },
+    xaxis: {
+      title: { text: 'Preference Weight (user vector)' },
       zeroline: true,
       range: xAxisRange,
       tickformat: '.2f',
-      automargin: true  // Auto-adjust margin for axis labels
+      automargin: true,
     },
-    yaxis: { 
-      title: { 
+    yaxis: {
+      title: {
         text: 'Feature',
-        standoff: 20
+        standoff: 20,
       },
-      automargin: true  // Auto-adjust margin for long labels
+      automargin: true,
     },
     showlegend: true,
   };
@@ -267,34 +181,26 @@ export const ExplainabilityView = () => {
         <h3>Your Preferences</h3>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '8px', flexWrap: 'wrap' }}>
           <p className="explainability-subtitle" style={{ margin: 0 }}>
-            Feature contributions for {explainabilityData.contributions.length} apartment(s)
+            Learned feature weights after {ratingsCount} ratings
           </p>
-          
-          {/* Apartment count selector */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <label style={{ fontSize: '0.9em', fontWeight: 500, color: '#495057' }}>
-              Show:
-            </label>
-            <select
-              value={maxApartments}
-              onChange={(e) => setMaxApartments(Number(e.target.value))}
+
+          {significant.length > 10 && (
+            <button
+              type="button"
+              onClick={() => setShowAllFeatures((prev) => !prev)}
               style={{
-                padding: '4px 8px',
+                padding: '4px 10px',
                 borderRadius: '4px',
                 border: '1px solid #ced4da',
-                backgroundColor: 'white',
-                fontSize: '0.9em',
+                backgroundColor: showAllFeatures ? '#e7f3ff' : 'white',
                 cursor: 'pointer',
+                fontSize: '0.85em',
               }}
             >
-              {[1, 2, 3, 4, 5].map((n) => (
-                <option key={n} value={n}>
-                  {n} apartment{n > 1 ? 's' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-          
+              {showAllFeatures ? 'Show top 10 only' : `Show all (${significant.length})`}
+            </button>
+          )}
+
           {canCompare && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
@@ -394,10 +300,10 @@ export const ExplainabilityView = () => {
           }}>
             <strong>📊 How to Read This Chart:</strong>
             <ul style={{ marginTop: '6px', marginBottom: '0', paddingLeft: '20px' }}>
-              <li><strong>Solid bars</strong> = Features that <em>increase</em> the recommendation score (aligned with your preferences)</li>
-              <li><strong>Patterned bars (diagonal lines)</strong> = Features that <em>decrease</em> the score (misaligned with your preferences)</li>
-              <li>Each apartment uses its <strong>recommendation rank color</strong> (same as other views)</li>
-              <li>Longer bars = stronger influence on the recommendation</li>
+              <li>Each bar shows how strongly the model <em>prefers</em> a feature for you.</li>
+              <li>Green bars (right) = features the model associates with apartments you like.</li>
+              <li>Red bars (left) = features that tend to lower the score for you.</li>
+              <li>Longer bars = stronger influence on how apartments are ranked.</li>
             </ul>
           </div>
           <div className="chart-container">

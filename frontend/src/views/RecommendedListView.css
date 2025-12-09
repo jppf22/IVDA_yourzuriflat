@@ -8,13 +8,13 @@
 }
 
 .list-header {
-  padding: 0.6rem 1.2rem;
+  padding: 1rem 1.5rem;
   border-bottom: 1px solid #e5e7eb;
   background: #f9fafb;
 }
 
 .list-header h2 {
-  margin: 0 0 0.25rem 0;
+  margin: 0 0 0.5rem 0;
   font-size: 1.25rem;
   color: #1f2937;
 }
@@ -23,7 +23,7 @@
 .tab-navigation {
   display: flex;
   gap: 0.5rem;
-  margin: 0.4rem 0;
+  margin: 0.75rem 0;
   border-bottom: 2px solid #e5e7eb;
   padding-bottom: 0;
 }
@@ -71,7 +71,7 @@
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
-  margin: 0.4rem 0 0.15rem 0;
+  margin: 0.75rem 0 0.25rem 0;
   font-size: 0.95rem;
   color: #374151;
 }
@@ -97,10 +97,10 @@
 .calibration-notice {
   background: #fef3c7;
   color: #92400e;
-  padding: 0.35rem 0.6rem;
+  padding: 0.5rem 0.75rem;
   border-radius: 4px;
   font-size: 0.85rem;
-  margin-top: 0.35rem;
+  margin-top: 0.5rem;
 }
 
 .list-container {
@@ -359,13 +359,13 @@
 }
 
 .success-notice {
-  padding: 0.35rem 0.6rem;
+  padding: 0.5rem 0.75rem;
   background: #d1fae5;
   border: 1px solid #10b981;
   border-radius: 4px;
   color: #065f46;
   font-size: 0.85rem;
-  margin-top: 0.35rem;
+  margin-top: 0.5rem;
 }
 
 /* Content container with split panel */
@@ -382,7 +382,7 @@
   flex: 1;
   overflow: hidden;
   gap: 1rem;
-  padding: 0.6rem 0.75rem 0.75rem;
+  padding: 1rem;
 }
 
 .content-container.full-width .list-container {
