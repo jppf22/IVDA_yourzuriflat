@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAppStore } from '../store/useAppStore';
 import {
@@ -153,6 +154,7 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
 
   const [showExplainability, setShowExplainability] = useState(false);
   const [selectedForExplain, setSelectedForExplain] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const [displayLimit, setDisplayLimit] = useState(ITEMS_PER_PAGE);
   const [modelLimit, setModelLimit] = useState(ITEMS_PER_PAGE);
@@ -171,6 +173,7 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
   const {
     data: recommendationsData,
     isLoading: isRecommendationsLoading,
+    isFetching: isRecommendationsFetching,
     isError: isRecommendationsError,
     refetch,
   } = useRecommendations(sessionId, modelLimit, ratingsCount);
@@ -481,6 +484,27 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
   }, [activeTab, selectedRankingId]);
 
   useEffect(() => {
+    if (!isExpanded) {
+      return;
+    }
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsExpanded(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isExpanded]);
+
+  useEffect(() => {
     const container = scrollContainerRef.current;
     if (container && scrollPositionRef.current > 0) {
       requestAnimationFrame(() => {
@@ -498,7 +522,6 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
   }, []);
 
   const isPrimaryLoading = isModelRanking ? isRecommendationsLoading : isApartmentsLoading;
-
   const loadMoreItems = useCallback(() => {
     if (isLoadingMore || isPrimaryLoading) {
       return;
@@ -538,10 +561,10 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
   ]);
 
   useEffect(() => {
-    if (!isRecommendationsLoading) {
+    if (!isRecommendationsFetching) {
       setIsLoadingMore(false);
     }
-  }, [isRecommendationsLoading]);
+  }, [isRecommendationsFetching]);
 
   useEffect(() => {
     if (!isModelRanking) {
@@ -569,7 +592,7 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
         observer.unobserve(target);
       }
     };
-  }, [loadMoreItems]);
+  }, [loadMoreItems, isExpanded]);
 
   const modelTrained = recommendationsData?.model_trained ?? false;
   const canResetProfile = ratingsCount > 0;
@@ -744,11 +767,30 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
     );
   }
 
-  return (
-    <div className="recommended-list-view">
+  const renderListView = (mode: 'inline' | 'overlay') => {
+    const rootClasses = ['recommended-list-view'];
+    if (mode === 'inline' && isExpanded) {
+      rootClasses.push('recommended-list-view--dimmed');
+    }
+    if (mode === 'overlay') {
+      rootClasses.push('recommended-list-view--overlay');
+    }
+    return (
+      <div className={rootClasses.join(' ')} aria-hidden={mode === 'inline' && isExpanded}>
       <div className="list-header">
         <div className="header-top">
-          <h2>Recommended For You</h2>
+          <div className="header-title">
+            <h2>Recommended For You</h2>
+            {mode === 'inline' && !isExpanded && (
+              <button
+                className="map-expand-button-small"
+                onClick={() => setIsExpanded(true)}
+                title="Expand recommendations table"
+              >
+                <span>⛶</span>
+              </button>
+            )}
+          </div>
           <div className="header-right">
             <div className="header-actions">
               <div className="ranking-controls">
@@ -791,6 +833,15 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
                 >
                   {isResettingProfile ? 'Resetting…' : 'Reset Ratings'}
                 </button>
+                {mode === 'overlay' && (
+                  <button
+                    className="map-collapse-button"
+                    onClick={() => setIsExpanded(false)}
+                    title="Minimize recommendations table"
+                  >
+                    <span>✕</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -1075,8 +1126,27 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
           </div>
         )}
       </div>
-    </div>
-  );
+      </div>
+    );
+  };
+
+  if (isExpanded) {
+    return (
+      <>
+        {renderListView('inline')}
+        {createPortal(
+          <div className="recommendations-expanded-overlay" role="dialog" aria-modal="true">
+            <div className="recommendations-expanded-panel">
+              {renderListView('overlay')}
+            </div>
+          </div>,
+          document.body
+        )}
+      </>
+    );
+  }
+
+  return renderListView('inline');
 };
 
 export default RecommendedListView;
