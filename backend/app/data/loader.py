@@ -11,7 +11,7 @@ class DataStore:
         base = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
         if path is None:
             path = os.path.join(base, "Notebooks", "listings_clean.json")
-        self.base_dir = os.path.dirname(os.path.dirname(base))  # Go up to project root
+        self.base_dir = os.path.dirname(base)  # Go up to project root (IVDA/)^M
         self.raw = pd.read_json(path, lines=True)
         self._preprocess()
 
