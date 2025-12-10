@@ -282,6 +282,10 @@
   background: #f3f4f6;
 }
 
+.legend-item.inactive {
+  opacity: 0.5;
+}
+
 .legend-color {
   width: 20px;
   height: 3px;
