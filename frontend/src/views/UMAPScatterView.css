@@ -341,3 +341,64 @@
   white-space: normal;
   overflow-wrap: anywhere;
 }
+
+.pca-scatter-view--dimmed {
+  opacity: 0.3;
+  pointer-events: none;
+  user-select: none;
+}
+
+.umap-expanded-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.75);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.umap-expanded-panel {
+  width: min(1600px, 98vw);
+  height: min(95vh, 1000px);
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 25px 60px rgba(15, 23, 42, 0.35);
+  border: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.umap-overlay-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 2050;
+}
+
+.umap-expanded-panel .scatter-header {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.scatter-header--overlay {
+  border-radius: 12px 12px 0 0;
+}
+
+.umap-expanded-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0 1rem 1rem;
+}
+
+.umap-expanded-body .scatter-plot-container {
+  flex: 1;
+  height: 100%;
+}
+
+.umap-expanded-body .scatter-plot-container > div {
+  height: 100%;
+}

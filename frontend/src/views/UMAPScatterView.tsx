@@ -161,6 +161,7 @@ export const UMAPScatterView = () => {
   const [colorMode, setColorMode] = useState<'topic' | 'recommendation'>('topic');
   const [activeTopicId, setActiveTopicId] = useState<number | null>(null);
   const [showTopicLegend, setShowTopicLegend] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   // Dynamic candidate list derived from first recommendation
   const dynamicCandidates = useMemo(() => {
@@ -181,6 +182,26 @@ export const UMAPScatterView = () => {
       .filter(k => !BASE_CANDIDATES.includes(k));
     return Array.from(new Set([...BASE_CANDIDATES, ...numericKeys]));
   }, [topRecommendations]);
+
+  useEffect(() => {
+    if (!isExpanded) return;
+    if (typeof window === 'undefined') return;
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsExpanded(false);
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [isExpanded]);
+
+  useEffect(() => {
+    if (!isExpanded) return;
+    if (typeof document === 'undefined') return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [isExpanded]);
 
   // For PCA/UMAP we need at least 2 attributes. Provide fallback attributes so hook stays stable.
   const effectiveForPCA = attributes.length >= 2 ? attributes : ['price','distance_from_city_center'];
@@ -558,25 +579,24 @@ export const UMAPScatterView = () => {
     }
   };
 
-  return (
-    <div className="pca-scatter-view">
-      <div className="scatter-header">
+  const renderHeader = (context: 'inline' | 'overlay') => {
+    const headerClass =
+      context === 'overlay'
+        ? 'scatter-header scatter-header--overlay'
+        : 'scatter-header';
+    return (
+      <div className={headerClass}>
         <h3>Discover Similar Apartments</h3>
         {mode === 'umap' && attributes.length > 2 && (
-          <div className="pca-info" style={{ 
-            fontSize: '0.8em', 
-            color: '#666', 
-          }}>
+          <div className="pca-info" style={{ fontSize: '0.8em', color: '#666' }}>
             <strong>Analyzing {attributes.length} attributes:</strong> {attributes.join(', ')}
           </div>
         )}
         {mode === 'raw' && attributes.length === 2 && (
-          <div className="pca-info" style={{ 
-            fontSize: '0.9em', 
-            color: '#666', 
-            marginTop: '4px',
-            marginBottom: '8px'
-          }}>
+          <div
+            className="pca-info"
+            style={{ fontSize: '0.9em', color: '#666', marginTop: '4px', marginBottom: '8px' }}
+          >
             <strong>Direct comparison:</strong> {attributes[0]} vs {attributes[1]}
           </div>
         )}
@@ -590,9 +610,9 @@ export const UMAPScatterView = () => {
             <div className="control-group">
               <label>
                 Color by:
-                <select 
-                  value={colorMode} 
-                  onChange={(e) => {
+                <select
+                  value={colorMode}
+                  onChange={e => {
                     const nextMode = e.target.value as 'topic' | 'recommendation';
                     setColorMode(nextMode);
                     if (nextMode !== 'topic') {
@@ -635,104 +655,143 @@ export const UMAPScatterView = () => {
             }
           >
             Reset Selection
-            {brushedApartmentIds.length > 0
-              ? ` (${brushedApartmentIds.length})`
-              : ''}
+            {brushedApartmentIds.length > 0 ? ` (${brushedApartmentIds.length})` : ''}
           </button>
-        </div>
-      </div>
-      
-      <div className="scatter-plot-container">
-        {hasTopics && colorMode === 'topic' && topics && (
-          <div className="topic-legend">
+          {context === 'inline' && !isExpanded && (
             <button
               type="button"
-              className="topic-legend-toggle"
-              onClick={() => setShowTopicLegend(prev => !prev)}
+              className="map-expand-button-small"
+              onClick={() => setIsExpanded(true)}
+              title="Expand scatter view"
             >
-              {showTopicLegend ? 'Hide topics' : 'Show topics'}
+              <span>⛶</span>
             </button>
-            {showTopicLegend && (
-              <div className="topic-legend-body">
-                <div className="topic-legend-header">
-                  <span className="topic-legend-title">Topics</span>
-                  <button
-                    type="button"
-                    className="topic-legend-reset"
-                    onClick={() => setActiveTopicId(null)}
-                  >
-                    Show all
-                  </button>
-                </div>
-                <div className="topic-legend-list">
-                  {topics.map((topic: TopicInfo) => (
-                    <button
-                      key={topic.topic_id}
-                      type="button"
-                      className={
-                        activeTopicId === topic.topic_id
-                          ? 'topic-pill active'
-                          : 'topic-pill'
-                      }
-                      onClick={() =>
-                        setActiveTopicId(prev =>
-                          prev === topic.topic_id ? null : topic.topic_id
-                        )
-                      }
-                      title={topic.label}
-                    >
-                      <span
-                        className="topic-pill-color"
-                        style={{
-                          backgroundColor:
-                            TOPIC_COLORS[topic.topic_id % TOPIC_COLORS.length],
-                        }}
-                      />
-                      <span className="topic-pill-label">{topic.label}</span>
-                    </button>
-                  ))}
-                </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderPlotContent = (context: 'inline' | 'overlay') => {
+    const enableSplitView = context === 'overlay' && hasSelection;
+    return (
+      <div className="scatter-plot-container">
+        {hasTopics && colorMode === 'topic' && topics && (
+        <div className="topic-legend">
+          <button
+            type="button"
+            className="topic-legend-toggle"
+            onClick={() => setShowTopicLegend(prev => !prev)}
+          >
+            {showTopicLegend ? 'Hide topics' : 'Show topics'}
+          </button>
+          {showTopicLegend && (
+            <div className="topic-legend-body">
+              <div className="topic-legend-header">
+                <span className="topic-legend-title">Topics</span>
+                <button
+                  type="button"
+                  className="topic-legend-reset"
+                  onClick={() => setActiveTopicId(null)}
+                >
+                  Show all
+                </button>
               </div>
-            )}
-          </div>
+              <div className="topic-legend-list">
+                {topics.map((topic: TopicInfo) => (
+                  <button
+                    key={topic.topic_id}
+                    type="button"
+                    className={
+                      activeTopicId === topic.topic_id ? 'topic-pill active' : 'topic-pill'
+                    }
+                    onClick={() =>
+                      setActiveTopicId(prev =>
+                        prev === topic.topic_id ? null : topic.topic_id
+                      )
+                    }
+                    title={topic.label}
+                  >
+                    <span
+                      className="topic-pill-color"
+                      style={{
+                        backgroundColor: TOPIC_COLORS[topic.topic_id % TOPIC_COLORS.length],
+                      }}
+                    />
+                    <span className="topic-pill-label">{topic.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
         )}
-        {hasSelection ? (
-          <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch', height: '100%' }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <h4 style={{ marginBottom: '4px' }}>Focused Selection</h4>
-              <Plot
-                data={[selectionBaseTrace, selectionTopTrace]}
-                layout={{ ...baseLayout }}
-                config={{ displayModeBar: true, displaylogo: false }}
-                onClick={handlePlotlyClick}
-                onSelected={handlePlotlySelected}
-                style={{ width: '100%', height: '100%' }}
-              />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <h4 style={{ marginBottom: '4px' }}>Global Overview</h4>
-              <Plot
-                data={[globalBaseTrace, globalTopTrace]}
-                layout={{ ...baseLayout }}
-                config={{ displayModeBar: true, displaylogo: false }}
-                onClick={handlePlotlyClick}
-                onSelected={handlePlotlySelected}
-                style={{ width: '100%', height: '100%' }}
-              />
-            </div>
+      {enableSplitView ? (
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch', height: '100%' }}>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <h4 style={{ marginBottom: '4px' }}>Focused Selection</h4>
+            <Plot
+              data={[selectionBaseTrace, selectionTopTrace]}
+              layout={{ ...baseLayout }}
+              config={{ displayModeBar: true, displaylogo: false }}
+              onClick={handlePlotlyClick}
+              onSelected={handlePlotlySelected}
+              style={{ width: '100%', height: '100%', flex: 1 }}
+            />
           </div>
-        ) : (
-          <Plot
-            data={[globalBaseTrace, globalTopTrace]}
-            layout={baseLayout}
-            config={{ displayModeBar: true, displaylogo: false }}
-            onClick={handlePlotlyClick}
-            onSelected={handlePlotlySelected}
-            style={{ width: '100%', height: '100%' }}
-          />
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <h4 style={{ marginBottom: '4px' }}>Global Overview</h4>
+            <Plot
+              data={[globalBaseTrace, globalTopTrace]}
+              layout={{ ...baseLayout }}
+              config={{ displayModeBar: true, displaylogo: false }}
+              onClick={handlePlotlyClick}
+              onSelected={handlePlotlySelected}
+              style={{ width: '100%', height: '100%', flex: 1 }}
+            />
+          </div>
+        </div>
+      ) : (
+        <Plot
+          data={[globalBaseTrace, globalTopTrace]}
+          layout={baseLayout}
+          config={{ displayModeBar: true, displaylogo: false }}
+          onClick={handlePlotlyClick}
+          onSelected={handlePlotlySelected}
+          style={{ width: '100%', height: '100%' }}
+        />
         )}
       </div>
-    </div>
+    );
+  };
+
+  return (
+    <>
+      <div
+        className={`pca-scatter-view${isExpanded ? ' pca-scatter-view--dimmed' : ''}`}
+        aria-hidden={isExpanded}
+      >
+        {renderHeader('inline')}
+        {!isExpanded && renderPlotContent('inline')}
+      </div>
+      {isExpanded && (
+        <div className="umap-expanded-overlay" role="dialog" aria-modal="true">
+          <div className="umap-expanded-panel">
+            <button
+              type="button"
+              className="map-collapse-button umap-overlay-close"
+              aria-label="Minimize expanded scatter view"
+              title="Minimize scatter view"
+              onClick={() => setIsExpanded(false)}
+            >
+              <span>✕</span>
+            </button>
+            {renderHeader('overlay')}
+            <div className="umap-expanded-body">{renderPlotContent('overlay')}</div>
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 
