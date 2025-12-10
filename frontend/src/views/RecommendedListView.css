@@ -194,6 +194,31 @@
   text-align: right;
 }
 
+.col-select {
+  width: 40px;
+  text-align: center;
+}
+
+.row-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.row-checkbox input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.apartment-row:hover .row-checkbox,
+.apartment-row.brushed .row-checkbox {
+  opacity: 1;
+}
+
 .attribute-score-value {
   display: inline-flex;
   width: 100%;
@@ -314,6 +339,22 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.clear-brush-button {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: #111827;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.clear-brush-button:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
 }
 
 .reset-profile-button {

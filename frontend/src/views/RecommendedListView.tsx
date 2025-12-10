@@ -59,6 +59,20 @@ interface RecommendedListViewProps {
 
 type TabView = 'all' | 'rated' | 'bookmarked';
 
+const haveSameIds = (a: string[], b: string[]) => {
+  if (a.length !== b.length) {
+    return false;
+  }
+  const sortedA = [...a].sort();
+  const sortedB = [...b].sort();
+  for (let i = 0; i < sortedA.length; i += 1) {
+    if (sortedA[i] !== sortedB[i]) {
+      return false;
+    }
+  }
+  return true;
+};
+
 const RANKING_OPTIONS: RankingOption[] = [
   {
     id: 'model',
@@ -135,6 +149,7 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
     topRecommendations,
     setTopRecommendations,
     brushedApartmentIds,
+    setBrushedApartmentIds,
     ratingsCount,
     bookmarkedApartmentIds,
     toggleBookmark,
@@ -155,6 +170,9 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
   const [showExplainability, setShowExplainability] = useState(false);
   const [selectedForExplain, setSelectedForExplain] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [tableBrushSnapshot, setTableBrushSnapshot] = useState<string[]>(() => [...brushedApartmentIds]);
+  const [isTableBrushContext, setIsTableBrushContext] = useState(false);
+  const tableBrushUpdateRef = useRef(false);
 
   const [displayLimit, setDisplayLimit] = useState(ITEMS_PER_PAGE);
   const [modelLimit, setModelLimit] = useState(ITEMS_PER_PAGE);
@@ -170,13 +188,24 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
     }
   }, [isModelRanking, displayLimit]);
 
+  useEffect(() => {
+    if (tableBrushUpdateRef.current) {
+      tableBrushUpdateRef.current = false;
+      return;
+    }
+    if (!haveSameIds(tableBrushSnapshot, brushedApartmentIds)) {
+      setTableBrushSnapshot(brushedApartmentIds);
+      setIsTableBrushContext(false);
+    }
+  }, [brushedApartmentIds, tableBrushSnapshot]);
+
   const {
     data: recommendationsData,
     isLoading: isRecommendationsLoading,
     isFetching: isRecommendationsFetching,
     isError: isRecommendationsError,
     refetch,
-  } = useRecommendations(sessionId, modelLimit, ratingsCount);
+  } = useRecommendations(sessionId, modelLimit, ratingsCount, { ignoreBrushedFilter: isTableBrushContext });
 
   const {
     data: initialSampleData,
@@ -450,7 +479,7 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
 
   useEffect(() => {
     let source: Recommendation[] = recommendationsArray.length > 0 ? recommendationsArray : fallbackRecommendations;
-    if (brushedApartmentIds.length > 0) {
+    if (brushedApartmentIds.length > 0 && !isTableBrushContext) {
       const filtered = source.filter((rec) => brushedApartmentIds.includes(String(rec.apartment.id)));
       if (filtered.length > 0) {
         source = filtered;
@@ -477,6 +506,7 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
     brushedApartmentIds,
     topRecommendations,
     setTopRecommendations,
+    isTableBrushContext,
   ]);
 
   useEffect(() => {
@@ -709,6 +739,34 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
     return rankingOption.formatMetric(row.metricValue ?? null, apartment);
   };
 
+  const toggleBrushSelection = useCallback(
+    (apartmentId: string) => {
+      const targetId = String(apartmentId);
+      const baseline = isTableBrushContext ? tableBrushSnapshot : brushedApartmentIds;
+      const alreadySelected = baseline.includes(targetId);
+      const updated = alreadySelected ? baseline.filter((id) => id !== targetId) : [...baseline, targetId];
+      setTableBrushSnapshot(updated);
+      setIsTableBrushContext(updated.length > 0);
+      tableBrushUpdateRef.current = true;
+      setBrushedApartmentIds(updated);
+    },
+    [
+      brushedApartmentIds,
+      isTableBrushContext,
+      tableBrushSnapshot,
+      setBrushedApartmentIds,
+    ]
+  );
+
+  const handleClearBrushSelection = useCallback(() => {
+    setTableBrushSnapshot([]);
+    setIsTableBrushContext(false);
+    tableBrushUpdateRef.current = true;
+    clearBrushed();
+  }, [clearBrushed]);
+
+  const hasBrushSelection = brushedApartmentIds.length > 0;
+
   if (isModelRanking && isRecommendationsLoading && !isInitialSampleLoading) {
     return (
       <div className="recommended-list-view">
@@ -808,6 +866,17 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
                     ))}
                   </select>
               </div>
+              {hasBrushSelection && (
+                <button
+                  type="button"
+                  className="reset-selection-button"
+                  onClick={handleClearBrushSelection}
+                  title="Clear brushed selection"
+                >
+                  <span className="reset-icon">🔄</span>
+                  <span>Clear Selection ({brushedApartmentIds.length})</span>
+                </button>
+              )}
               <div className="header-buttons">
                 {modelTrained && ratingsCount >= 5 && (
                   <button
@@ -868,6 +937,7 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
           <table className="apartments-table">
             <thead>
               <tr>
+                <th className="col-select">Select</th>
                 <th className="col-rank">Rank</th>
                 <th className="col-name">Name</th>
                 <th className="col-price">Price</th>
@@ -898,6 +968,17 @@ export const RecommendedListView = ({ onRate, onRemoveRating, currentRatings }: 
                     className={`apartment-row ${isSelected ? 'selected' : ''} ${isBrushed ? 'brushed' : ''}`}
                     style={{ borderLeft: isTop ? `4px solid ${color}` : undefined }}
                   >
+                    <td className="col-select">
+                      <div className={`row-checkbox ${isBrushed ? 'active' : ''}`}>
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${apartment.name || 'apartment'}`}
+                          checked={isBrushed}
+                          onChange={() => toggleBrushSelection(apartmentId)}
+                          onClick={(event) => event.stopPropagation()}
+                        />
+                      </div>
+                    </td>
                     <td className="col-rank">
                       <span
                         className="rank-badge"

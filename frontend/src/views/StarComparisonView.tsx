@@ -5,6 +5,7 @@
 
 import Plot from 'react-plotly.js';
 import { useAppStore } from '../store/useAppStore';
+import { useRecommendationsSubset } from '../api/hooks';
 import { getColorForApartment } from '../utils/colors';
 import type { Data, Layout } from 'plotly.js';
 import { useMemo, useState, useRef, useEffect, useCallback } from 'react';
@@ -128,7 +129,16 @@ function buildDiscreteColorscale(colors: string[], maxIndex: number): [number, s
 }
 
 export const StarComparisonView = () => {
-  const { selectedApartmentIds, topRecommendations, starAttributes, setStarAttributes, openDetailDrawer } = useAppStore();
+  const {
+    selectedApartmentIds,
+    topRecommendations,
+    starAttributes,
+    setStarAttributes,
+    openDetailDrawer,
+    brushedApartmentIds,
+    sessionId,
+    ratingsCount,
+  } = useAppStore();
   
   // User-controlled limit for displayed apartments (default: 3)
   const [maxApartments, setMaxApartments] = useState(3);
@@ -137,11 +147,30 @@ export const StarComparisonView = () => {
   const [hoveredApartmentId, setHoveredApartmentId] = useState<string | null>(null);
   const chartAreaRef = useRef<HTMLDivElement | null>(null);
 
-  // Use selected apartments or top recommendations, limited by maxApartments
-  const apartmentsToCompare =
-    selectedApartmentIds.length > 0
-      ? topRecommendations.filter((apt) => selectedApartmentIds.includes(apt.id)).slice(0, maxApartments)
-      : topRecommendations.slice(0, maxApartments);
+  const brushedComparisonIds = useMemo(() => brushedApartmentIds.slice(0, 5), [brushedApartmentIds]);
+  const { data: brushedSubsetData } = useRecommendationsSubset(sessionId, brushedComparisonIds, ratingsCount);
+  const brushedApartments = useMemo(() => {
+    if (!brushedComparisonIds.length || !brushedSubsetData?.recommendations_in_subset) {
+      return [] as Apartment[];
+    }
+    const byId = new Map<string, Apartment>();
+    brushedSubsetData.recommendations_in_subset.forEach((entry) => {
+      byId.set(String(entry.apartment.id), entry.apartment);
+    });
+    return brushedComparisonIds
+      .map((id) => byId.get(String(id)))
+      .filter((apt): apt is Apartment => Boolean(apt));
+  }, [brushedComparisonIds, brushedSubsetData]);
+
+  const apartmentsToCompare = useMemo(() => {
+    if (brushedApartments.length > 0) {
+      return brushedApartments.slice(0, Math.min(maxApartments, brushedApartments.length));
+    }
+    if (selectedApartmentIds.length > 0) {
+      return topRecommendations.filter((apt) => selectedApartmentIds.includes(apt.id)).slice(0, maxApartments);
+    }
+    return topRecommendations.slice(0, maxApartments);
+  }, [brushedApartments, selectedApartmentIds, topRecommendations, maxApartments]);
 
   // Keep activeApartmentIds in sync with the current comparison set
   useEffect(() => {

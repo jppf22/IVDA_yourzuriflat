@@ -24,6 +24,10 @@ import type {
   NumericDistributionsResponse,
 } from './types';
 
+interface UseRecommendationsOptions {
+  ignoreBrushedFilter?: boolean;
+}
+
 // Query keys for cache management
 export const queryKeys = {
   apartments: (params?: ApartmentsQueryParams) => ['apartments', params] as const,
@@ -117,8 +121,14 @@ export const useApartmentDetail = (id: string) => {
 };
 
 // Recommendations based on user ratings
-export const useRecommendations = (sessionId: string, limit: number = 20, ratingsCount?: number) => {
+export const useRecommendations = (
+  sessionId: string,
+  limit: number = 20,
+  ratingsCount?: number,
+  options?: UseRecommendationsOptions
+) => {
   const { filters, brushedApartmentIds, selectedClusterId } = useAppStore();
+  const ignoreBrushFilter = options?.ignoreBrushedFilter ?? false;
   const params: Record<string, unknown> = { session_id: sessionId, limit };
   const pushIf = (key: string, value: unknown) => {
     if (value !== undefined && value !== null && value !== '' && !(Array.isArray(value) && value.length === 0)) {
@@ -150,16 +160,16 @@ export const useRecommendations = (sessionId: string, limit: number = 20, rating
   if (selectedClusterId !== null) {
     pushIf('cluster_id', selectedClusterId);
   }
-  if (brushedApartmentIds && brushedApartmentIds.length > 0) {
+  if (brushedApartmentIds && brushedApartmentIds.length > 0 && !ignoreBrushFilter) {
     params['apartment_ids'] = brushedApartmentIds;
   }
 
   // Create a stable signature string for cache separation
   const filterSig = JSON.stringify(params, Object.keys(params).sort());
 
-  const selectionSig = (brushedApartmentIds || []).join(',');
+  const selectionSig = ignoreBrushFilter ? 'table-brush-ignored' : (brushedApartmentIds || []).join(',');
   return useQuery<RecommendationsResponse>({
-    queryKey: ['recommendations', sessionId, limit, filterSig, selectionSig, ratingsCount],
+    queryKey: ['recommendations', sessionId, limit, filterSig, selectionSig, ratingsCount, ignoreBrushFilter],
     queryFn: () => apiClient.get<RecommendationsResponse>('/recommendations', params),
     enabled: !!sessionId,
     staleTime: 30000, // 30 seconds - prevents unnecessary refetches while scrolling
