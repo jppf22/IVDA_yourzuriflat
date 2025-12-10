@@ -21,6 +21,7 @@ export const ExplainabilityView = () => {
   const [showComparison, setShowComparison] = React.useState(false);
   const [selectedSnapshot, setSelectedSnapshot] = React.useState<number | null>(null);
   const [showAllFeatures, setShowAllFeatures] = React.useState(false);
+  const [visibleGroup, setVisibleGroup] = React.useState<'both' | 'positive' | 'negative'>('both');
 
   // Check if model is ready (5+ ratings)
   const isModelReady = ratingsCount >= 5;
@@ -120,7 +121,7 @@ export const ExplainabilityView = () => {
     //text: positive.map((p) => `+${p.weight.toFixed(3)}`),
     textposition: 'auto',
     hovertemplate: '<b>%{y}</b><br>Weight: +%{x:.3f}<extra></extra>',
-    showlegend: true,
+    showlegend: false,
   };
 
   const negativeTrace: Data = {
@@ -136,10 +137,15 @@ export const ExplainabilityView = () => {
     //text: negative.map((p) => p.weight.toFixed(3)),
     textposition: 'auto',
     hovertemplate: '<b>%{y}</b><br>Weight: -%{x:.3f}<extra></extra>',
-    showlegend: true,
+    showlegend: false,
   };
-
-  const traces: Data[] = [positiveTrace, negativeTrace];
+  // Control which feature groups are visible using a custom caption,
+  // mimicking Plotly's legend isolate behavior.
+  const traces: Data[] = React.useMemo(() => {
+    if (visibleGroup === 'positive') return [positiveTrace];
+    if (visibleGroup === 'negative') return [negativeTrace];
+    return [positiveTrace, negativeTrace];
+  }, [visibleGroup, positiveTrace, negativeTrace]);
 
   const allWeights = coeffs.length ? coeffs : [0];
   const minWeight = Math.min(...allWeights, 0);
@@ -168,12 +174,21 @@ export const ExplainabilityView = () => {
       },
       automargin: true,
     },
-    showlegend: true,
+    showlegend: false,
   };
 
   // Determine if comparison is available
   const hasSnapshots = snapshotsData && snapshotsData.available_thresholds.length > 0;
   const canCompare = ratingsCount > 5 && hasSnapshots;
+
+  const handleToggleGroup = (group: 'positive' | 'negative') => {
+    setVisibleGroup((prev) => {
+      if (prev === 'both') return group; // isolate clicked group
+      if (prev === group) return 'both'; // show both again
+      // if the other group was isolated, switch isolation to this one
+      return group;
+    });
+  };
 
   return (
     <div className="explainability-view">
@@ -200,6 +215,45 @@ export const ExplainabilityView = () => {
               {showAllFeatures ? 'Show top 10 only' : `Show all (${significant.length})`}
             </button>
           )}
+
+          {/* Custom legend-style caption with toggle behavior */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85em' }}>
+            <span style={{ color: '#6b7280' }}>Legend:</span>
+            <button
+              type="button"
+              onClick={() => handleToggleGroup('positive')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '2px 8px',
+                borderRadius: '4px',
+                border: visibleGroup === 'positive' || visibleGroup === 'both' ? '1px solid #2b8a3e' : '1px solid #ced4da',
+                backgroundColor: visibleGroup === 'positive' ? '#e6f4ea' : 'white',
+                cursor: 'pointer',
+              }}
+            >
+              <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: '#2b8a3e' }} />
+              <span>Preferred</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleToggleGroup('negative')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '2px 8px',
+                borderRadius: '4px',
+                border: visibleGroup === 'negative' || visibleGroup === 'both' ? '1px solid #e03131' : '1px solid #ced4da',
+                backgroundColor: visibleGroup === 'negative' ? '#fde2e2' : 'white',
+                cursor: 'pointer',
+              }}
+            >
+              <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: '#e03131' }} />
+              <span>Less preferred</span>
+            </button>
+          </div>
 
           {canCompare && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

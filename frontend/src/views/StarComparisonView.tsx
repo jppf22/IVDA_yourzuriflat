@@ -1,6 +1,6 @@
 /**
  * Star Comparison View (T2 - Compare apartments by attributes)
- * Radar chart comparing up to 5 apartments on normalized attributes
+ * Parallel coordinates chart comparing up to 5 apartments on multiple attributes
  */
 
 import Plot from 'react-plotly.js';
@@ -23,19 +23,28 @@ const BASE_CANDIDATES: string[] = [
   'amenities_count',
 ];
 
+const DEFAULT_STAR_ATTRIBUTES: string[] = [
+  'minimum_nights',
+  'accommodates',
+  'price',
+  'distance_from_city_center',
+];
+
 // Human readable tooltip descriptions
 const ATTRIBUTE_DESCRIPTIONS: Record<string, string> = {
-  price: 'Listing price (lower is better; log scaled).',
-  accommodates: 'Max number of guests the listing can host.',
-  bedrooms: 'Separate bedrooms (privacy).',
-  bathrooms: 'Bathrooms (comfort).',
-  beds: 'Total beds (sleep flexibility).',
-  minimum_nights: 'Minimum nights required (lower is better).',
-  amenities_count: 'Count of amenities (capped at 30).',
-  distance_from_city_center: 'Distance to city center (lower is better; inverted).',
+  price: 'Listing price per night',
+  accommodates: 'Max number of guests the listing can host',
+  bedrooms: 'Number of separate bedrooms',
+  bathrooms: 'Number of bathrooms',
+  beds: 'Total number of beds',
+  minimum_nights: 'Minimum nights required',
+  amenities_count: 'Total count of amenities',
+  distance_from_city_center: 'Distance to Zurich city center (km)',
+  availability_365: 'Days available per year',
+  maximum_nights: 'Maximum nights allowed',
 };
 
-// Derive a numeric value for each attribute, handling parsing/inversion
+// Derive a numeric value for each attribute
 function deriveNumeric(apartment: Apartment | null | undefined, key: string): number {
   if (!apartment) return 0;
   if (key === 'amenities_count') {
@@ -53,23 +62,12 @@ function deriveNumeric(apartment: Apartment | null | undefined, key: string): nu
   return typeof v === 'number' && isFinite(v) ? v : 0;
 }
 
-// Scale a column to [0,1] (optionally invert)
-function scale(values: number[], invert = false): number[] {
-  if (values.length === 0) return [];
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  return values.map((v) => {
-    const norm = (v - min) / range;
-    return invert ? 1 - norm : norm;
-  });
-}
-
 export const StarComparisonView = () => {
-  const { selectedApartmentIds, topRecommendations, starAttributes, toggleStarAttribute, resetStarAttributes, setStarAttributes, openDetailDrawer } = useAppStore();
+  const { selectedApartmentIds, topRecommendations, starAttributes, setStarAttributes, openDetailDrawer } = useAppStore();
   
   // User-controlled limit for displayed apartments (default: 3)
   const [maxApartments, setMaxApartments] = useState(3);
+  const [showLegend, setShowLegend] = useState(true);
 
   // Use selected apartments or top recommendations, limited by maxApartments
   const apartmentsToCompare =
@@ -81,9 +79,23 @@ export const StarComparisonView = () => {
 
   // Active attributes (defaults from store)
   const attributes = useMemo(
-    () => (starAttributes.length ? starAttributes : ['minimum_nights','accommodates','price','distance_from_city_center']),
+    () => (starAttributes.length ? starAttributes : DEFAULT_STAR_ATTRIBUTES),
     [starAttributes]
   );
+
+  const handleToggleAttribute = (attr: string) => {
+    const current = starAttributes.length ? starAttributes : DEFAULT_STAR_ATTRIBUTES;
+    const hasAttr = current.includes(attr);
+
+    if (hasAttr) {
+      const next = current.filter((a) => a !== attr);
+      setStarAttributes(next);
+    } else {
+      const next = [...current, attr];
+      // Respect the original 7-attribute limit from the store
+      setStarAttributes(next.slice(0, 7));
+    }
+  };
 
   // Build list of dynamic attribute candidates from first available apartment
   const dynamicCandidates = useMemo(() => {
@@ -108,71 +120,69 @@ export const StarComparisonView = () => {
     return Array.from(new Set(merged));
   }, [topRecommendations]);
 
-  // Build raw matrix for scaling
+  // Build raw matrix with actual values for each attribute
   const rawMatrix = useMemo(
     () => attributes.map((attr) => apartmentsToCompare.map((apt) => deriveNumeric(apt, attr))),
     [attributes, apartmentsToCompare]
   );
 
-  // Apply per-attribute scaling rules
-  const scaledMatrix = useMemo(
-    () =>
-      rawMatrix.map((col, idx) => {
-        const attr = attributes[idx];
-        if (attr === 'price') {
-          const logged = col.map((v) => Math.log(v > 0 ? v : 1));
-          return scale(logged);
-        }
-        if (attr === 'minimum_nights') return scale(col, true);
-        if (/^distance/i.test(attr)) return scale(col, true); // invert distance metrics
-        if (attr === 'amenities_count') {
-          const capped = col.map((v) => Math.min(v, 30));
-          return scale(capped);
-        }
-        return scale(col);
-      }),
-    [rawMatrix, attributes]
-  );
+  // Create parallel coordinates trace
+  const traces: Data[] = useMemo(() => {
+    if (apartmentsToCompare.length === 0 || attributes.length === 0) return [];
 
-  // Create dynamic radar traces from scaled matrix
-  const traces: Data[] = apartmentsToCompare.map((apt, aptIdx) => {
-    const color = getColorForApartment(apt.id, topRecommendationIds);
-    const vals = scaledMatrix.map((col) => col[aptIdx]);
-    return {
-      type: 'scatterpolar',
-      r: [...vals, vals[0]],
-      theta: [...attributes, attributes[0]],
-      name: apt.name ? apt.name.substring(0, 30) : String(apt.id),
-      fill: 'none',
-      line: { color, width: 2 },
-      opacity: 0.8,
-      // attach apartment id so click can open detail
-      customdata: Array(vals.length + 1).fill(String(apt.id)),
-      hovertemplate: `<b>${apt.name ? apt.name.replace(/`/g,'') : apt.id}</b><br>` +
-        attributes.map((attr, i) => `${attr}: ${vals[i].toFixed(2)}`).join('<br>') +
-        '<extra></extra>',
-    } as Data;
-  });
+    // Map apartments to color indices for consistent coloring
+    const colorIndices = apartmentsToCompare.map((apt, idx) => idx);
+    const colorScale = apartmentsToCompare.map((apt, idx) => {
+      const color = getColorForApartment(apt.id, topRecommendationIds);
+      // Convert to normalized position [0,1] for colorscale
+      const pos = apartmentsToCompare.length > 1 ? idx / (apartmentsToCompare.length - 1) : 0;
+      return [pos, color];
+    });
+
+    // Build dimensions for parallel coordinates
+    const dimensions = attributes.map((attr, attrIdx) => {
+      const values = rawMatrix[attrIdx];
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      
+      return {
+        label: attr,
+        values: values,
+        range: [min, max],
+        tickformat: attr === 'price' ? '$.0f' : '.1f',
+      };
+    });
+
+    // Single parcoords trace with all apartments
+    return [{
+      type: 'parcoords',
+      line: {
+        color: colorIndices,
+        colorscale: colorScale,
+        showscale: false,
+      },
+      dimensions: dimensions,
+      // Store apartment names for hover
+      customdata: apartmentsToCompare.map(apt => ({
+        id: String(apt.id),
+        name: apt.name || String(apt.id),
+      })),
+      hovertemplate: '<b>%{customdata.name}</b><extra></extra>',
+    } as Data];
+  }, [apartmentsToCompare, attributes, rawMatrix, topRecommendationIds]);
+
+  // Ensure enough horizontal space for many attributes; enable horizontal scrolling
+  const minPlotWidth = Math.max(attributes.length * 140, 600);
 
   const layout: Partial<Layout> = {
-    polar: {
-      radialaxis: {
-        visible: true,
-        range: [0, 1],
-      },
-    },
-    height: 400,
-    margin: { t: 0, b: 0, l: 100, r: 140 },
-    showlegend: false,
-    legend: {
-      orientation: 'v',
-      x: 1,
-      y: 1,
-    },
+    margin: { t: 60, b: 40, l: 100, r: 100 },
+    paper_bgcolor: 'white',
+    plot_bgcolor: 'white',
+    autosize: true,
   };
 
-  // Attribute selection UI
-  const disabledAdd = attributes.length >= 7;
+  // Attribute selection UI (parallel coordinates can handle more dimensions)
+  const disabledAdd = attributes.length >= 10;
   if (apartmentsToCompare.length === 0) {
     return (
       <div className="star-comparison-view">
@@ -194,55 +204,87 @@ export const StarComparisonView = () => {
             <h3>Compare Attributes</h3>
             <p className="comparison-subtitle">Comparing {apartmentsToCompare.length} apartments</p>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <label htmlFor="max-apartments" style={{ fontSize: '0.8rem', color: '#6b7280' }}>
-              Show:
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <label htmlFor="max-apartments" style={{ fontSize: '0.8rem', color: '#6b7280' }}>
+                Show:
+              </label>
+              <select
+                id="max-apartments"
+                value={maxApartments}
+                onChange={(e) => setMaxApartments(Number(e.target.value))}
+                style={{
+                  padding: '0.25rem',
+                  fontSize: '0.8rem',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '4px',
+                  background: 'white',
+                  cursor: 'pointer',
+                }}
+              >
+                <option value={3}>3 apartments</option>
+                <option value={4}>4 apartments</option>
+                <option value={5}>5 apartments</option>
+              </select>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.8rem', color: '#6b7280', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={showLegend}
+                onChange={(e) => setShowLegend(e.target.checked)}
+                style={{ width: '14px', height: '14px' }}
+              />
+              Show legend
             </label>
-            <select
-              id="max-apartments"
-              value={maxApartments}
-              onChange={(e) => setMaxApartments(Number(e.target.value))}
-              style={{
-                padding: '0.25rem',
-                fontSize: '0.8rem',
-                border: '1px solid #d1d5db',
-                borderRadius: '4px',
-                background: 'white',
-                cursor: 'pointer',
-              }}
-            >
-              <option value={3}>3 apartments</option>
-              <option value={4}>4 apartments</option>
-              <option value={5}>5 apartments</option>
-            </select>
           </div>
         </div>
-        <div className="star-controls">
-          </div>
+        <div className='comparison-bottom'>
+          <span className="comparison-subtitle">Attributes:</span>
+          <div className="star-controls">
             <AttributeMultiSelect
               candidates={dynamicCandidates}
               selected={attributes}
-              onToggle={toggleStarAttribute}
+              onToggle={handleToggleAttribute}
               disabledAdd={disabledAdd}
             />
           </div>
-      <Plot
-        data={traces}
-        layout={layout}
-        config={{ displayModeBar: false, displaylogo: false }}
-        style={{ width: '100%', height: '100%' }}
-        onClick={(ev: Readonly<{
-          points: Array<{
-            curveNumber: number;
-          }>;
-        }>) => {
-          const point = ev.points?.[0];
-          if (!point) return;
-          const traceIndex = point.curveNumber;
-          const apt = apartmentsToCompare[traceIndex];
-            if (apt) openDetailDrawer(String(apt.id));
-        }}
-      />
+        </div>
+        
+      </div>
+      <div className="chart-container">
+        <div className="parcoords-scroll-container">
+          <div style={{ minWidth: `${minPlotWidth}px`, height: '100%' }}>
+            <Plot
+              data={traces}
+              layout={layout}
+              config={{ displayModeBar: false, displaylogo: false }}
+              style={{ width: '100%', height: '100%' }}
+            />
+          </div>
+        </div>
+        {showLegend && (
+          <div className="parcoords-legend">
+            {apartmentsToCompare.map((apt) => {
+              const color = getColorForApartment(apt.id, topRecommendationIds);
+              return (
+                <div 
+                  key={apt.id} 
+                  className="legend-item"
+                  onClick={() => openDetailDrawer(String(apt.id))}
+                  style={{ cursor: 'pointer' }}
+                  title="Click to view details"
+                >
+                  <div 
+                    className="legend-color" 
+                    style={{ backgroundColor: color }}
+                  />
+                  <span className="legend-label">{apt.name ? apt.name.substring(0, 40) : String(apt.id)}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
@@ -319,7 +361,7 @@ const AttributeMultiSelect = ({ candidates, selected, onToggle, disabledAdd }: A
           </ul>
           <div className="dropdown-footer">
             <div className="footer-left"><button type="button" onClick={() => selected.forEach(a=>onToggle(a))} disabled={selected.length===0}>Clear</button></div>
-            <small>{selected.length}/7 selected</small>
+            <small>{selected.length}/10 selected</small>
           </div>
         </div>
       )}

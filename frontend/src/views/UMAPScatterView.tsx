@@ -159,6 +159,8 @@ export const UMAPScatterView = () => {
     : ['price', 'distance_from_city_center'];
 
   const [colorMode, setColorMode] = useState<'topic' | 'recommendation'>('topic');
+  const [activeTopicId, setActiveTopicId] = useState<number | null>(null);
+  const [showTopicLegend, setShowTopicLegend] = useState(true);
 
   // Dynamic candidate list derived from first recommendation
   const dynamicCandidates = useMemo(() => {
@@ -308,6 +310,8 @@ export const UMAPScatterView = () => {
     deriveMarkerStyle(p.apartment_id, p.topic_id)
   );
 
+  const topicFilterActive = hasTopics && colorMode === 'topic' && activeTopicId !== null;
+
   // Helper to build base/top traces from a given point subset and styles
   const buildTracesForPoints = (
     pointSubset: PCAPoint[],
@@ -428,6 +432,9 @@ export const UMAPScatterView = () => {
   const topIdSetForGlobal = new Set(topRecommendationIds);
 
   points.forEach((p: PCAPoint, idx: number) => {
+    if (topicFilterActive && p.topic_id !== activeTopicId) {
+      return;
+    }
     const style = scatterStyles[idx];
     const a = p.apartment;
     const topicInfo = p.topic_label ? `<br><b>Topic:</b> ${p.topic_label}` : '';
@@ -499,7 +506,10 @@ export const UMAPScatterView = () => {
 
   // Focused selection traces (subset only)
   const selectedPoints = hasSelection
-    ? points.filter(p => brushedIdSet.has(String(p.apartment_id)))
+    ? points.filter(p =>
+        brushedIdSet.has(String(p.apartment_id)) &&
+        (!topicFilterActive || p.topic_id === activeTopicId)
+      )
     : [];
   const selectedStyles = hasSelection
     ? selectedPoints.map(p => deriveMarkerStyle(p.apartment_id, p.topic_id))
@@ -582,7 +592,13 @@ export const UMAPScatterView = () => {
                 Color by:
                 <select 
                   value={colorMode} 
-                  onChange={(e) => setColorMode(e.target.value as 'topic' | 'recommendation')}
+                  onChange={(e) => {
+                    const nextMode = e.target.value as 'topic' | 'recommendation';
+                    setColorMode(nextMode);
+                    if (nextMode !== 'topic') {
+                      setActiveTopicId(null);
+                    }
+                  }}
                   style={{ marginLeft: '0.25rem' }}
                 >
                   <option value="topic">Topic</option>
@@ -626,50 +642,60 @@ export const UMAPScatterView = () => {
         </div>
       </div>
       
-      {/* Topic Legend */}
-      {hasTopics && colorMode === 'topic' && topics && (
-        <div style={{ 
-          padding: '12px', 
-          background: '#f8f9fa', 
-          borderRadius: '4px', 
-          marginBottom: '12px',
-          fontSize: '0.9em'
-        }}>
-          <strong>Topics Discovered:</strong>
-          <div style={{ 
-            display: 'flex', 
-            flexWrap: 'wrap', 
-            gap: '12px', 
-            marginTop: '8px' 
-          }}>
-            {topics.map((topic: TopicInfo) => (
-              <div 
-                key={topic.topic_id} 
-                style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '6px' 
-                }}
-              >
-                <div 
-                  style={{ 
-                    width: '16px', 
-                    height: '16px', 
-                    borderRadius: '50%', 
-                    background: TOPIC_COLORS[topic.topic_id % TOPIC_COLORS.length],
-                    border: '1px solid #ddd'
-                  }} 
-                />
-                <span style={{ fontWeight: '500' }}>{topic.label}</span>
-                <span style={{ color: '#888', fontSize: '0.85em' }}>
-                  ({topic.keywords.slice(0, 3).join(', ')})
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
       <div className="scatter-plot-container">
+        {hasTopics && colorMode === 'topic' && topics && (
+          <div className="topic-legend">
+            <button
+              type="button"
+              className="topic-legend-toggle"
+              onClick={() => setShowTopicLegend(prev => !prev)}
+            >
+              {showTopicLegend ? 'Hide topics' : 'Show topics'}
+            </button>
+            {showTopicLegend && (
+              <div className="topic-legend-body">
+                <div className="topic-legend-header">
+                  <span className="topic-legend-title">Topics</span>
+                  <button
+                    type="button"
+                    className="topic-legend-reset"
+                    onClick={() => setActiveTopicId(null)}
+                  >
+                    Show all
+                  </button>
+                </div>
+                <div className="topic-legend-list">
+                  {topics.map((topic: TopicInfo) => (
+                    <button
+                      key={topic.topic_id}
+                      type="button"
+                      className={
+                        activeTopicId === topic.topic_id
+                          ? 'topic-pill active'
+                          : 'topic-pill'
+                      }
+                      onClick={() =>
+                        setActiveTopicId(prev =>
+                          prev === topic.topic_id ? null : topic.topic_id
+                        )
+                      }
+                      title={topic.label}
+                    >
+                      <span
+                        className="topic-pill-color"
+                        style={{
+                          backgroundColor:
+                            TOPIC_COLORS[topic.topic_id % TOPIC_COLORS.length],
+                        }}
+                      />
+                      <span className="topic-pill-label">{topic.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         {hasSelection ? (
           <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch', height: '100%' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
