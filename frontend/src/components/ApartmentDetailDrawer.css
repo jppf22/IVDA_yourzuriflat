@@ -5,7 +5,7 @@
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.5);
-  z-index: 5000;
+  z-index: 10000;
   animation: fadeIn 0.2s;
 }
 
@@ -18,7 +18,7 @@
   max-width: 90vw;
   background: white;
   box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
-  z-index: 5010;
+  z-index: 10010;
   display: flex;
   flex-direction: column;
   animation: slideIn 0.3s;
@@ -74,7 +74,10 @@
 .drawer-content {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 1.5rem;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
 }
 
 .apartment-image-placeholder {

@@ -254,6 +254,31 @@
   opacity: 0.6;
 }
 
+.btn-view-details {
+  width: 100%;
+  padding: 0.5rem 1rem;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 0.75rem;
+}
+
+.btn-view-details:hover {
+  background: #e5e7eb;
+  border-color: #9ca3af;
+  color: #1f2937;
+}
+
+.btn-view-details:active {
+  transform: scale(0.98);
+}
+
+
 .loading-message {
   text-align: center;
   padding: 2rem;

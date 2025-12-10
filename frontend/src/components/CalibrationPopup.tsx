@@ -27,10 +27,11 @@ interface ApartmentCardProps {
   rating: number | null;
   onRate: (apartmentId: string, rating: number) => void;
   disabled: boolean;
+  onViewDetails: (apartmentId: string) => void;
 }
 
-const ApartmentCard = ({ apartmentId, rating, onRate, disabled }: ApartmentCardProps) => {
-  const { data: apartment, isLoading, error } = useApartmentDetail(apartmentId);
+const ApartmentCard = ({ apartmentId, rating, onRate, disabled, onViewDetails }: ApartmentCardProps) => {
+   const { data: apartment, isLoading, error } = useApartmentDetail(apartmentId);
 
   if (isLoading) {
     return (
@@ -103,6 +104,19 @@ const ApartmentCard = ({ apartmentId, rating, onRate, disabled }: ApartmentCardP
           </div>
         )}
       </div>
+      
+      <button
+        className="btn-view-details"
+        onClick={(e) => {
+          e.stopPropagation();
+          onViewDetails(apartmentId);
+        }}
+        type="button"
+      >
+        View Details
+      </button>
+
+
 
       <div className="rating-section">
         <h4>Rate this apartment</h4>
@@ -127,6 +141,7 @@ export const CalibrationPopup = () => {
     userRatings,
     setUserRating,
     setCalibrationComplete,
+    openDetailDrawer
   } = useAppStore();
 
   // Track ratings for all 5 apartments (apartmentId -> rating)
@@ -229,6 +244,7 @@ export const CalibrationPopup = () => {
               rating={apartmentRatings[apartmentId] || null}
               onRate={handleRate}
               disabled={submitRatingMutation.isPending}
+              onViewDetails={openDetailDrawer}
             />
           ))}
         </div>
