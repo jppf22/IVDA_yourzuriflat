@@ -643,20 +643,17 @@ export const UMAPScatterView = () => {
               </button>
             </div>
           )}
-          <button
-            type="button"
-            className="reset-selection-btn"
-            onClick={() => setBrushedApartmentIds([])}
-            disabled={brushedApartmentIds.length === 0}
-            title={
-              brushedApartmentIds.length === 0
-                ? 'No selection to reset'
-                : 'Reset current selection subset'
-            }
-          >
-            Reset Selection
-            {brushedApartmentIds.length > 0 ? ` (${brushedApartmentIds.length})` : ''}
-          </button>
+          {brushedApartmentIds.length > 0 && (
+            <button
+              type="button"
+              className="reset-selection-button"
+              onClick={() => setBrushedApartmentIds([])}
+              title="Clear brushed selection"
+            >
+              <span className="reset-icon">🔄</span>
+              <span>Clear Selection ({brushedApartmentIds.length})</span>
+            </button>
+          )}
           {context === 'inline' && !isExpanded && (
             <button
               type="button"
