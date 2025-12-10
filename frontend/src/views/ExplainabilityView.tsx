@@ -140,12 +140,14 @@ export const ExplainabilityView = () => {
     showlegend: false,
   };
   // Control which feature groups are visible using a custom caption,
-  // mimicking Plotly's legend isolate behavior.
-  const traces: Data[] = React.useMemo(() => {
-    if (visibleGroup === 'positive') return [positiveTrace];
-    if (visibleGroup === 'negative') return [negativeTrace];
-    return [positiveTrace, negativeTrace];
-  }, [visibleGroup, positiveTrace, negativeTrace]);
+  // mimicking Plotly's legend isolate behavior (no hooks here to
+  // keep hook ordering stable across early returns above).
+  const traces: Data[] =
+    visibleGroup === 'positive'
+      ? [positiveTrace]
+      : visibleGroup === 'negative'
+      ? [negativeTrace]
+      : [positiveTrace, negativeTrace];
 
   const allWeights = coeffs.length ? coeffs : [0];
   const minWeight = Math.min(...allWeights, 0);
